@@ -543,14 +543,20 @@ static void find_tags(char *line, size_t *offset, logdata *l) {
     }
 }
 
-static void parse_tail(char *line, size_t *startpos, logdata *l, size_t *tailstart) {
+static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart) {
+
+    // parse tail part of logline
+    // Nginx:
+    // [hostname "1.2.3.4"] [uri "/"] [unique_id "168142074224.426959"]
+    // Apache:
+    // [hostname "your.fqdn.name"] [uri "/uri.html"] [unique_id "AAbbTur0ZpO6NHHJAvMHLgAAAIQ"]
 
     size_t matches[2];
     int k, t;
     int hostlast = 0;
     size_t tlen = 2048;
     int mcnt;
-    char tbuff[tlen];
+    char tbuff[tlen+1];
 
     memset(&matches, '\0', sizeof(size_t)*2);
     mcnt = find_pattern(line, *startpos, l->linelen, "[hostname \"", 11, &matches, MATCH_LAST);
@@ -564,11 +570,16 @@ static void parse_tail(char *line, size_t *startpos, logdata *l, size_t *tailsta
             set_error(l, "[hostname] field is truncated!", *startpos, l->linelen);
             return;
         }
-        tbuff[t] = '\0';
-        l->hostname = mscl_stradd(l, tbuff, t);
-        *startpos = k;
-        if (tailstart != NULL) {
-            *tailstart = matches[0];
+        // 'hostname' is relevant only if type of log is Apache
+        // Nginx [hostname ""] contains the IP address, therefore we
+        // have to process that later - see end of this function
+        if (linetype == LOG_TYPE_APACHE) {
+            tbuff[t] = '\0';
+            l->hostname = mscl_stradd(l, tbuff, t);
+            *startpos = k;
+            if (tailstart != NULL) {
+                *tailstart = matches[0];
+            }
         }
     }
     else {
@@ -625,6 +636,28 @@ static void parse_tail(char *line, size_t *startpos, logdata *l, size_t *tailsta
         set_error(l, "Can't find [uri] field!", hostlast, l->linelen);
         return;
     }
+
+    // Nginx [hostname ""] filed contains the server IP address, we have to process
+    // the last 'host: "..."' field
+    if (linetype == LOG_TYPE_NGINX) {
+        memset(&matches, '\0', sizeof(size_t)*2);
+        mcnt = find_pattern(line, hostlast, l->linelen, "host: \"", 7, &matches, MATCH_FIRST);
+        if (mcnt > 0) {
+            k = matches[0] + matches[1];
+            t = 0;
+            while(k < l->linelen && line[k] != '"' && t < tlen) {
+                tbuff[t++] = line[k++];
+            }
+            tbuff[t] = '\0';
+            l->hostname = mscl_stradd(l, tbuff, t);
+        }
+        else {
+            // broken line
+            set_error(l, "Can't find 'host: \"\"' field!", hostlast, l->linelen);
+            return;
+        }
+    }
+
     return;
 }
 
@@ -810,7 +843,7 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
     prevstart--;
     *pos = prevstart;
 
-    parse_tail(line, pos, l, NULL);
+    parse_tail(linetype, line, pos, l, NULL);
 
     return;
 }
@@ -950,7 +983,7 @@ void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype
     }
 
     size_t hostpos = 0;
-    parse_tail(line, pos, l, &hostpos);
+    parse_tail(linetype, line, pos, l, &hostpos);
     if (l->is_broken == 1) {
         return;
     }
@@ -1123,7 +1156,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                         l->modseclinetype = LOGMSG_REQBODY;
                         size_t offs = toffset;
                         size_t hostpos = 0;
-                        parse_tail(line, &offs, l, &hostpos);
+                        parse_tail(t, line, &offs, l, &hostpos);
                         if (hostpos > 0) {
                             int k = toffset+1;
                             int i = 0;
@@ -1140,7 +1173,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                             l->modseclinetype = LOGMSG_AUDITLOG;
                             size_t offs = toffset;
                             size_t hostpos = 0;
-                            parse_tail(line, &offs, l, &hostpos);
+                            parse_tail(t, line, &offs, l, &hostpos);
                             if (hostpos > 0) {
                                 int k = toffset+1;
                                 int i = 0;
