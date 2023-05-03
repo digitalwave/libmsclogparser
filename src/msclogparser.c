@@ -783,8 +783,8 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
 
                 case 'v':
                     tmp = &l->version;
-                    strcpy(tfield, "[version]");
-                    maxlen = 20;
+                    strcpy(tfield, "[ver]");
+                    maxlen = 50;
                     break;
 
                 case 'a':
