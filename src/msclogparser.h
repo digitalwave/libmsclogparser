@@ -72,7 +72,7 @@ typedef enum logmsgtype {
 } logmsgtype;
 
 typedef struct msclogpool {
-    char    pool[4096];
+    char    pool[8192];
     char    *currptr;
     size_t  offset;
 } msclogpool;
