@@ -2,6 +2,8 @@ v0.2.0 - YYYY-MM-DD
 -----------------
   * Get host from 'host' field in case of Nginx log
   * Increment possible length of [ver]; fix field name
+  * URI field was truncated, fixed
+  * Long lines caused segfault, fixed
 
 v0.1.0 - 2023-02-11
 -----------------
