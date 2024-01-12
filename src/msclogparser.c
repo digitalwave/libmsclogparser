@@ -629,7 +629,7 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
         if (tbuff[t] == ']') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->linelen); }
         if (tbuff[t] == '"') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->linelen); }
         tbuff[t+1] = '\0';
-        l->uri = mscl_stradd(l, tbuff, t);
+        l->uri = mscl_stradd(l, tbuff, t+1);
     }
     else {
         // broken line
