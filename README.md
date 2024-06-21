@@ -17,39 +17,38 @@ The library is written in C, therefore you can embed it in other C, C++, Go or R
     * [Constants in bindings](#constants-in-bindings)
   * [Structure](#structure)
     * [datapool](#datapool)
-    * [linelen](#linelen)
-    * [is_modsecline](#is_modsecline)
-    * [is_broken](#is_broken)
-    * [date_iso](#date_iso)
-    * [date_epoch](#date_epoch)
-    * [client](#client)
-    * [modseclinetype](#modseclinetype)
-    * [modsecmsg](#modsecmsg)
-    * [modsecmsglen](#modsecmsglen)
-    * [modsecdenymsg](#modsecdenymsg)
-    * [modsecmsgreason](#modsecmsgreason)
-    * [modsecmsgop](#modsecmsgop)
-    * [modsecmsgoperand](#modsecmsgoperand)
-    * [modsecmsgtrgname](#modsecmsgtrgname)
-    * [modsecmsgtrgvalue](#modsecmsgtrgvalue)
-    * [ruleerror](#ruleerror)
-    * [file](#file)
-    * [line](#line)
-    * [id](#id)
-    * [rev](#rev)
-    * [msg](#msg)
-    * [data](#data)
-    * [severity](#severity)
-    * [version](#version)
-    * [maturity](#maturity)
-    * [accuracy](#accuracy)
-    * [tagcnt](#tagcnt)
-    * [tags](#tags)
-    * [hostname](#hostname)
-    * [uri](#uri)
-    * [unique_id](#unique_id)
+    * [entry_is_modsecline](#entry_is_modsecline)
+    * [entry_is_broken](#entry_is_broken)
+    * [log_entry_raw_length](#log_entry_raw_length)
+    * [log_date_iso](#log_date_iso)
+    * [log_date_timestamp](#log_date_timestamp)
+    * [log_client](#log_client)
+    * [log_entry_class](#log_entry_class)
+    * [log_modsec_msg](#log_modsec_msg)
+    * [log_modsec_msg_length](#log_modsec_msg_length)
+    * [log_modsec_reason](#log_modsec_reason)
+    * [log_modsec_operator](#log_modsec_operator)
+    * [log_modsec_operand](#log_modsec_operand)
+    * [log_modsec_target_name](#log_modsec_target_name)
+    * [log_modsec_target_value](#log_modsec_target_value)
+    * [log_modsec_process_error](#log_modsec_process_error)
+    * [log_rule_file](#log_rule_file)
+    * [log_rule_line](#log_rule_line)
+    * [log_rule_id](#log_rule_id)
+    * [log_rule_rev](#log_rule_rev)
+    * [log_rule_msg](#log_rule_msg)
+    * [log_rule_data](#log_rule_data)
+    * [log_rule_severity](#log_rule_severity)
+    * [log_rule_version](#log_rule_version)
+    * [log_rule_maturity](#log_rule_maturity)
+    * [log_rule_accuracy](#log_rule_accuracy)
+    * [log_rule_tags_cnt](#log_rule_tags_cnt)
+    * [log_rule_tags](#log_rule_tags)
+    * [log_hostname](#log_hostname)
+    * [log_uri](#log_uri)
+    * [log_unique_id](#log_unique_id)
     * [lineerrpool](#lineerrpool)
-    * [lineerrcnt](#lineerrcnt)
+    * [log_entry_errors_cnt](#log_entry_errors_cnt)
   * [Methods](#methods)
   * [Strucure in bindings](#strucure-in-bindings)
 * [Compile, install](#compile-install)
@@ -75,7 +74,7 @@ This means, we can apply any pull requests from any contributor after the agreem
 
 ## Current version
 
-The current version of library is `0.1.0`.
+The current version of library is `0.2.0`.
 
 ## API
 
@@ -115,42 +114,41 @@ Depends on the used binding, these constants will appear in different ways: in s
 
 Originally, this is a C structure, 
 
-```
+```C
 typedef struct logdata {
     msclogpool      datapool;
-    size_t          linelen;
-    int             is_modsecline;
-    int             is_broken;
-    char            *date_iso;
-    double          date_epoch;
-    char            *client;
-    logmsgtype      modseclinetype;
-    char            *modsecmsg;
-    size_t          modsecmsglen;
-    char            *modsecdenymsg;
-    char            *modsecmsgreason;
-    char            *modsecmsgop;
-    char            *modsecmsgoperand;
-    char            *modsecmsgtrgname;
-    char            *modsecmsgtrgvalue;
-    char            *ruleerror;
-    char            *file;
-    char            *line;
-    char            *id;
-    char            *rev;
-    char            *msg;
-    char            *data;
-    char            *severity;
-    char            *version;
-    char            *maturity;
-    char            *accuracy;
-    size_t          tagcnt;
-    char            *tags;
-    char            *hostname;
-    char            *uri;
-    char            *unique_id;
+    int             entry_is_modsecline;
+    int             entry_is_broken;
+    size_t          log_entry_raw_length;
+    char            *log_date_iso;
+    double          log_date_timestamp;
+    char            *log_client;
+    logmsgtype      log_entry_class;
+    char            *log_modsec_msg;
+    size_t          log_modsec_msg_length;
+    char            *log_modsec_reason;
+    char            *log_modsec_operator;
+    char            *log_modsec_operand;
+    char            *log_modsec_target_name;
+    char            *log_modsec_target_value;
+    char            *log_modsec_process_error;
+    char            *log_rule_file;
+    char            *log_rule_line;
+    char            *log_rule_id;
+    char            *log_rule_rev;
+    char            *log_rule_msg;
+    char            *log_rule_data;
+    char            *log_rule_severity;
+    char            *log_rule_version;
+    char            *log_rule_maturity;
+    char            *log_rule_accuracy;
+    size_t          log_rule_tags_cnt;
+    char            *log_rule_tags;
+    char            *log_hostname;
+    char            *log_uri;
+    char            *log_unique_id;
     msclogpool      lineerrpool;
-    int             lineerrcnt;
+    int             log_entry_errors_cnt;
 } logdata;
 ```
 
@@ -159,9 +157,9 @@ Lets see what field contains which data.
 ##### `datapool`
 This is a pre-allocated memory pool with fix size. Basicly, that's a structure:
 
-```
+```C
 typedef struct msclogpool {
-    char    pool[4096];
+    char    pool[8192];
     char    *currptr;
     size_t  offset;
 } msclogpool;
@@ -171,14 +169,7 @@ Type: `msclogpool`
 
 This needed for the parser to work, you do not need to know about - **do not touch it or read/write it**!
 
-
-##### `linelen`
-Contains the length of line; this value comes from the user, and does not change.
-
-Type: `size_t`
-Eg.: `1238`
-
-##### `is_modsecline`
+##### `entry_is_modsecline`
 Indicates that the line is produced by ModSecurity.
 
 This is determined by searching for the `' ModSecurity:'` substring (please note the leading space and `:`). If found, this value is 1, otherwise 0. If 0, the common fields are not filled (`date_iso`, `date_epoch`, `client`).
@@ -186,7 +177,7 @@ This is determined by searching for the `' ModSecurity:'` substring (please note
 Type: `int`
 Eg.: `0` | `1`
 
-##### `is_broken`
+##### `entry_is_broken`
 Indicates that the line is produced by ModSecurity **AND** has a chunked field.
 
 This is decided based if a field recognizable (it has at least one character, eg ` [v`) but does not have the trailing `]` or `"`. If the value is 1, then the `lineerror` will contain the reason, and `lineerrpos` (it's an array with two fields) will contain the start and end positions.
@@ -194,7 +185,13 @@ This is decided based if a field recognizable (it has at least one character, eg
 Type: `int`
 Eg.: `0` | `1`
 
-##### `date_iso`
+##### `log_entry_raw_length`
+Contains the length of line; this value comes from the user, and does not change.
+
+Type: `size_t`
+Eg.: `1238`
+
+##### `log_date_iso`
 Contains the parsed date field from the log in ISO format (`YYYY-MM-DD HH:ii:ss`).
 
 Type: `*char`
@@ -209,7 +206,7 @@ will give
 2022-11-05 13:19:51
 ```
 
-##### `date_epoch`
+##### `log_date_timestamp`
 Contains the parsed date field from the log in unix timestamp.
 
 Type: `double`
@@ -224,7 +221,7 @@ will give
 1667650791.041880 (Apache)
 ```
 
-##### `client`
+##### `log_client`
 Contains the parsed client source address and (in case of Apache) source port.
 
 Type: `*char`
@@ -242,7 +239,7 @@ will give
 
 As you can see, in case of Apache the parser will process the first `[client]` field. In case of Nginx this value is at the end of the line.
 
-##### `modseclinetype`
+##### `log_entry_class`
 Contains the parsed ModSecurity message type.
 
 Type: `logmsgtype`
@@ -253,7 +250,7 @@ Eg.:
 ```
 will provide a `LOGMSG_WARNING` value for this field.
 
-##### `modsecmsg`
+##### `log_modsec_msg`
 Contains the parsed ModSecurity message.
 
 Type: `*char`
@@ -268,23 +265,18 @@ Warning. Pattern match "^[\\\\d.:]+$" at REQUEST_HEADERS:Host. (Apache)
 ModSecurity: Warning. Matched "Operator `Rx' with parameter `^[\d.:]+$' against variable `REQUEST_HEADERS:Host' (Value: `1.2.3.4' ) (Nginx)
 ```
 
-#### modsecmsglen
+#### log_modsec_msg_length
 Contains the length of the message field above.
 
 Type: `size_t`
 
-#### modsecdenymsg
-If the `modseclinetype` is `LOGMSG_ACCDENIED` then this is same as `modsecmsg`.
-
-Type: `*char`
-
-#### modsecmsgreason
+#### log_modsec_reason
 Holds the reason of the rule triggered.
 
 Type: `*char`
 Eg.: `Pattern match`, `detected XSS using libinjection`, ...
 
-#### modsecmsgop
+#### log_modsec_operator
 Contains the operator of the triggered rule **only in case of libmodsecurity3**
 
 Type: `*char`
@@ -292,7 +284,7 @@ Eg.: `PmFromFile`, `Rx`, `Ge`, ...
 
 Consider the log contains: `Warning. Matched "Operator `PmFromFile' with parameter `scanners-user-agents.data' against variable `REQUEST_HEADERS:User-Agent' (Value: `Mozilla/5.0 zgrab/0.x' )`. In this case this value will be `PmFromFile`.
 
-#### modsecmsgoperand
+#### log_modsec_operand
 Contains the rule's operand what engine uses with the operator (above). This field is filled **only in case of libmodsecurity3**
 
 Type: `*char`
@@ -300,7 +292,7 @@ Eg.: `scanners-user-agents.data`
 
 Consider the log contains: `Warning. Matched "Operator `PmFromFile' with parameter `scanners-user-agents.data' against variable `REQUEST_HEADERS:User-Agent' (Value: `Mozilla/5.0 zgrab/0.x' )`. In this case this value will be `scanners-user-agents.data`.
 
-#### modsecmsgtrgname
+#### log_modsec_target_name
 Contains the name of the target, where the operator matched. This field is filled **only in case of libmodsecurity3**
 
 Type: `*char`
@@ -308,7 +300,7 @@ Eg.: `REQUEST_HEADERS:User-Agent`
 
 Consider the log contains: `Warning. Matched "Operator `PmFromFile' with parameter `scanners-user-agents.data' against variable `REQUEST_HEADERS:User-Agent' (Value: `Mozilla/5.0 zgrab/0.x' )`. In this case this value will be `REQUEST_HEADERS:User-Agent`.
 
-#### modsecmsgtrgvalue
+#### log_modsec_target_value
 Contains the value of the target (see below) where the operator matched (below too). This field is filled **only in case of libmodsecurity3**
 
 Type: `*char`
@@ -316,7 +308,7 @@ Eg.: `Mozilla/5.0 zgrab/0.x`
 
 Consider the log contains: `Warning. Matched "Operator `PmFromFile' with parameter `scanners-user-agents.data' against variable `REQUEST_HEADERS:User-Agent' (Value: `Mozilla/5.0 zgrab/0.x' )`. In this case this value will be `Mozilla/5.0 zgrab/0.x`.
 
-##### `ruleerror`
+##### `log_modsec_process_error`
 Usually this field is filled only in case of Apache. This field contains the message if a rule error occurred.
 
 Type: `*char`
@@ -329,7 +321,7 @@ Eg. (only in case of Apache)
 Execution error - PCRE limits exceeded (-8): (null).
 ```
 
-##### `file`
+##### `log_rule_file`
 Contains the parsed `[file]` field.
 
 Type: `*char`
@@ -355,7 +347,7 @@ will produce the line
 
 The only recognizable pattern is ` [file "` - a substring with leading space and trailing `"`. This is the "reference" point in the operation of the parser.
 
-##### `line`
+##### `log_rule_line`
 Contains the line number of the file.
 
 Type: `*char`
@@ -368,7 +360,7 @@ will give
 735
 ```
 
-##### `id`
+##### `log_rule_id`
 Contains the id of the rule.
 
 Type: `*char`
@@ -386,7 +378,7 @@ Please note, that in some special cases this value can be a single char: `-`, eg
 ...Rule 7f0c68755d38 [id "-"][file "...
 ```
 
-##### `rev`
+##### `log_rule_rev`
 Contains the `rev` value of the rule.
 
 Type: `*char`
@@ -397,7 +389,7 @@ In case of libmodsecurity3, this field is always presents, but could be empty:
 ... [rev ""] ...
 ```
 
-##### `msg`
+##### `log_rule_msg`
 Contains the `msg` field of the rule.
 
 Type: `*char`
@@ -411,7 +403,7 @@ will give
 Request Missing a Host Header
 ```
 
-##### `data`
+##### `log_rule_data`
 Contains the `data` of the rule.
 
 Type: `*char`
@@ -430,7 +422,7 @@ In case of libmodsecurity3, this field is always presents, but could be empty:
 ... [data ""] ...
 ```
 
-##### `severity`
+##### `log_rule_severity`
 Contains the `severity` of the rule.
 
 Type: `*char`
@@ -451,7 +443,7 @@ In case of libmodsecurity3, this field is always presents, but could be empty:
 ... [severity ""] ...
 ```
 
-##### `version`
+##### `log_rule_version`
 Contains the `version` of the rule.
 
 Type: `*char`
@@ -470,7 +462,7 @@ In case of libmodsecurity3, this field is always presents, but could be empty:
 ... [version ""] ...
 ```
 
-##### `maturity`
+##### `log_rule_maturity`
 Contains the `maturity` of the rule.
 
 Type: `*char`
@@ -481,7 +473,7 @@ In case of libmodsecurity3, this field is always presents, but could be empty:
 ... [matrity ""] ...
 ```
 
-##### `accuracy`
+##### `log_rule_accuracy`
 Contains the `accuracy` of the rule.
 
 Type: `*char`
@@ -491,7 +483,7 @@ In case of libmodsecurity3, this field is always presents, but could be empty:
 ```
 ... [accuracy ""] ...
 ```
-##### `tagcnt`
+##### `log_rule_tagcnt`
 Contains the number of recognized tags.
 
 If a tag is chunked, but the field was recognized during parsing, it will count to this.
@@ -503,7 +495,7 @@ Eg.:
 
 will produces `2` for value of `tagcnt`.
 
-##### `tags`
+##### `log_rule_tags`
 Contains the list of tags of the rule.
 
 Type: `*char`
@@ -538,7 +530,7 @@ if (l.tagcnt > 0) {
 }
 ```
 
-##### `hostname`
+##### `log_hostname`
 Contains the hostname of the virtual host. This property is independent from the rule, and always presents.
 
 Type: `*char`
@@ -553,7 +545,7 @@ modsecurity.digitalwave.hu
 
 This field can't be chunked.
 
-##### `uri`
+##### `log_uri`
 Contains the URI of the request. This property is independent from the rule, and always presents.
 
 Type: `*char`
@@ -568,7 +560,7 @@ will give
 
 This field can't be chunked.
 
-##### `unique_id`
+##### `log_unique_id`
 Contains the unique_id of the request in webserver. This property is independent from the rule, and always presents.
 
 Type: `*char`
@@ -599,7 +591,7 @@ typedef struct msclogerr {
 
 To get the items, you can use the method `read_msclog_err()`. See this [methods](#methods) section.
 
-##### `lineerrcnt`
+##### `log_entry_errors_cnt`
 Contains the number of errors.
 
 Type: `int`
@@ -819,7 +811,7 @@ At the end of the `configure` script run you will see the summary:
 ```
 ----------------------------------------------------------------------
 
- msclogparser Version 0.1 configuration:
+ msclogparser Version 0.2.0 configuration:
 
  OS Type        Linux
  Prefix         /usr/local

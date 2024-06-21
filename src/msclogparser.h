@@ -50,7 +50,7 @@ modsecurity@digitalwave.hu
 #define MSCLOGPARSER_H
 
 #define MSCLOGPARSER_MAJOR "0"
-#define MSCLOGPARSER_MINOR "1"
+#define MSCLOGPARSER_MINOR "2"
 #define MSCLOGPARSER_PATCH "0"
 #define MSCLOGPARSER_VERSION MSCLOGPARSER_MAJOR"."MSCLOGPARSER_MINOR"."MSCLOGPARSER_PATCH
 
@@ -85,39 +85,38 @@ typedef struct msclogerr {
 
 typedef struct logdata {
     msclogpool      datapool;
-    size_t          linelen;
-    int             is_modsecline;
-    int             is_broken;
-    char            *date_iso;
-    double          date_epoch;
-    char            *client;
-    logmsgtype      modseclinetype;
-    char            *modsecmsg;
-    size_t          modsecmsglen;
-    char            *modsecdenymsg;
-    char            *modsecmsgreason;
-    char            *modsecmsgop;
-    char            *modsecmsgoperand;
-    char            *modsecmsgtrgname;
-    char            *modsecmsgtrgvalue;
-    char            *ruleerror;
-    char            *file;
-    char            *line;
-    char            *id;
-    char            *rev;
-    char            *msg;
-    char            *data;
-    char            *severity;
-    char            *version;
-    char            *maturity;
-    char            *accuracy;
-    size_t          tagcnt;
-    char            *tags;
-    char            *hostname;
-    char            *uri;
-    char            *unique_id;
+    int             entry_is_modsecline;
+    int             entry_is_broken;
+    size_t          log_entry_raw_length;
+    char            *log_date_iso;
+    double          log_date_timestamp;
+    char            *log_client;
+    logmsgtype      log_entry_class;
+    char            *log_modsec_msg;
+    size_t          log_modsec_msg_length;
+    char            *log_modsec_reason;
+    char            *log_modsec_operator;
+    char            *log_modsec_operand;
+    char            *log_modsec_target_name;
+    char            *log_modsec_target_value;
+    char            *log_modsec_process_error;
+    char            *log_rule_file;
+    char            *log_rule_line;
+    char            *log_rule_id;
+    char            *log_rule_rev;
+    char            *log_rule_msg;
+    char            *log_rule_data;
+    char            *log_rule_severity;
+    char            *log_rule_version;
+    char            *log_rule_maturity;
+    char            *log_rule_accuracy;
+    size_t          log_rule_tags_cnt;
+    char            *log_rule_tags;
+    char            *log_hostname;
+    char            *log_uri;
+    char            *log_unique_id;
     msclogpool      lineerrpool;
-    int             lineerrcnt;
+    int             log_entry_errors_cnt;
 } logdata;
 
 void read_msclog_err(msclogpool *pool, msclogerr *err);

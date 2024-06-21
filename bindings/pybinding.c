@@ -52,7 +52,7 @@ modsecurity@digitalwave.hu
 #include "msclogparser.h"
 
 
-#define MODULE_VERSION "0.1.0"
+#define MODULE_VERSION "0.2.0"
 
 static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log.";
 
@@ -73,61 +73,60 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
 
     PyObject *tags = PyList_New(0);
 
-    for(size_t i = 0; i < l.tagcnt; i++) {
-        PyList_Append(tags, Py_BuildValue("s", l.tags));
-        l.tags += strlen(l.tags) + 1;
+    for(size_t i = 0; i < l.log_rule_tags_cnt; i++) {
+        PyList_Append(tags, Py_BuildValue("s", l.log_rule_tags));
+        l.log_rule_tags += strlen(l.log_rule_tags) + 1;
     }
 
 
     PyObject *errors = PyList_New(0);
     PyObject *errorspos = PyList_New(0);
 
-    if (l.lineerrcnt > 0) {
+    if (l.log_entry_errors_cnt > 0) {
         // reset errpool ptr
         l.lineerrpool.currptr = l.lineerrpool.pool;
         msclogerr logerr;
-        for (int c=0; c < l.lineerrcnt; c++) {
+        for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
             PyList_Append(errors, Py_BuildValue("s", logerr.errmsg));
             PyList_Append(errorspos, Py_BuildValue("[k,k]", *logerr.startpos, *logerr.endpos));
         }
     }
 
-    PyObject * rv = Py_BuildValue("{s:k,s:i,s:i,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:i,s:O,s:s,s:s,s:s,s:i,s:O,s:O}",
-        "linelen",           l.linelen,
-        "is_modsecline",     l.is_modsecline,
-        "is_broken",         l.is_broken,
-        "date_iso",          l.date_iso,
-        "date_epoch",        l.date_epoch,
-        "client",            l.client,
-        "modseclinetype",    l.modseclinetype,
-        "modsecmsg",         l.modsecmsg,
-        "modsecmsglen",      l.modsecmsglen,
-        "modsecdenymsg",     l.modsecdenymsg,
-        "modsecmsgreason",   l.modsecmsgreason,
-        "modsecmsgop",       l.modsecmsgop,
-        "modsecmsgoperand",  l.modsecmsgoperand,
-        "modsecmsgtrgname",  l.modsecmsgtrgname,
-        "modsecmsgtrgvalue", l.modsecmsgtrgvalue,
-        "ruleerror",         l.ruleerror,
-        "file",              l.file,
-        "line",              l.line,
-        "id",                l.id,
-        "rev",               l.rev,
-        "msg",               l.msg,
-        "data",              l.data,
-        "severity",          l.severity,
-        "version",           l.version,
-        "maturity",          l.maturity,
-        "accuracy",          l.accuracy,
-        "tagcnt",            l.tagcnt,
-        "tags",              tags,
-        "hostname",          l.hostname,
-        "uri",               l.uri,
-        "unique_id",         l.unique_id,
-        "lineerrorcnt",      l.lineerrcnt,
-        "lineerrors",        errors,
-        "lineerrorspos",     errorspos
+    PyObject * rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:i,s:O,s:s,s:s,s:s,s:i,s:O,s:O}",
+        "entry_is_modsecline",        l.entry_is_modsecline,
+        "entry_is_broken",            l.entry_is_broken,
+        "log_entry_raw_length",       l.log_entry_raw_length,
+        "log_date_iso",               l.log_date_iso,
+        "log_date_timestamp",         l.log_date_timestamp,
+        "log_client",                 l.log_client,
+        "log_entry_class",            l.log_entry_class,
+        "log_modsec_msg",             l.log_modsec_msg,
+        "log_modsec_msg_length",      l.log_modsec_msg_length,
+        "log_modsec_reason",          l.log_modsec_reason,
+        "log_modsec_operator",        l.log_modsec_operator,
+        "log_modsec_operand",         l.log_modsec_operand,
+        "log_modsec_target_name",     l.log_modsec_target_name,
+        "log_modsec_target_value",    l.log_modsec_target_value,
+        "log_modsec_process_error",   l.log_modsec_process_error,
+        "log_rule_file",              l.log_rule_file,
+        "log_rule_line",              l.log_rule_line,
+        "log_rule_id",                l.log_rule_id,
+        "log_rule_rev",               l.log_rule_rev,
+        "log_rule_msg",               l.log_rule_msg,
+        "log_rule_data",              l.log_rule_data,
+        "log_rule_severity",          l.log_rule_severity,
+        "log_rule_version",           l.log_rule_version,
+        "log_rule_maturity",          l.log_rule_maturity,
+        "log_rule_accuracy",          l.log_rule_accuracy,
+        "log_rule_tags_cnt",          l.log_rule_tags_cnt,
+        "log_rule_tags",              tags,
+        "log_hostname",               l.log_hostname,
+        "log_uri",                    l.log_uri,
+        "log_unique_id",              l.log_unique_id,
+        "log_entry_errors_cnt",       l.log_entry_errors_cnt,
+        "log_entry_errors",           errors,
+        "log_entry_errors_pos",       errorspos
     );
 
     return rv;

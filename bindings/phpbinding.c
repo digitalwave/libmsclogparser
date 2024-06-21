@@ -53,18 +53,25 @@ modsecurity@digitalwave.hu
 
 #include "msclogparser.h"
 
-#define MODULE_VERSION "0.1.0"
+#define MODULE_VERSION "0.2.0"
 
 extern zend_module_entry mscphplogparser_module_entry;
 # define phpext_mscphplogparser_ptr &mscphplogparser_module_entry
 
-# define PHP_MSCPHPLOGPARSER_VERSION "0.1"
+# define PHP_MSCPHPLOGPARSER_VERSION "0.2"
 
 
 PHP_MINIT_FUNCTION(mscphplogparser);
 PHP_RINIT_FUNCTION(mscphplogparser);
 PHP_MINFO_FUNCTION(mscphplogparser);
 PHP_FUNCTION(parse);
+
+// Argument info
+ZEND_BEGIN_ARG_INFO_EX(arginfo_parse, 0, 0, 3)
+    ZEND_ARG_INFO(0, line)
+    ZEND_ARG_INFO(0, len)
+    ZEND_ARG_INFO(0, ltype)
+ZEND_END_ARG_INFO()
 
 # if defined(ZTS) && defined(COMPILE_DL_MSCPHPLOGPARSER)
 ZEND_TSRMLS_CACHE_EXTERN()
@@ -81,73 +88,74 @@ static zend_class_entry *logparser_lp = NULL;
 
 PHP_FUNCTION(parse)
 {
-    zend_string  *line;
+    char          *line;
+    size_t        linelen;
     zend_long     len;
     zend_long     ltype;
 
     zend_string *retval;
 
-    if (zend_parse_parameters_throw(ZEND_NUM_ARGS(), "Sll", &line, &len, &ltype) == FAILURE) {
-        return;
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "sll", &line, &linelen, &len, &ltype) == FAILURE) {
+        RETURN_FALSE;
     }
 
     logdata l;
     memset(&l, '\0', sizeof(logdata));
 
-    parse(ZSTR_VAL(line), (size_t)len, (loglinetype)ltype, &l);
+    int rc = parse(line, (size_t)len, (loglinetype)ltype, &l);
 
     zval arr, tags, errors, errorspos;
-    array_init(&arr);
 
-    add_assoc_long(&arr,   "linelen",       l.linelen);
-    add_assoc_long(&arr,   "is_modsecline", l.is_modsecline);
-    add_assoc_long(&arr,   "is_broken",     l.is_broken);
-    add_assoc_string(&arr, "date_iso",      l.date_iso);
-    add_assoc_double(&arr, "date_epoch",    l.date_epoch);
-    add_assoc_string(&arr, "client",        l.client);
-    add_assoc_long(&arr,   "modseclinetype", l.modseclinetype);
-    add_assoc_string(&arr, "modsecmsg",     l.modsecmsg);
-    add_assoc_long(&arr,   "modsecmsglen",  l.modsecmsglen);
-    add_assoc_string(&arr, "modsecdenymsg", l.modsecdenymsg);
-    add_assoc_string(&arr, "modsecmsgreason",   l.modsecmsgreason);
-    add_assoc_string(&arr, "modsecmsgop",   l.modsecmsgop);
-    add_assoc_string(&arr, "modsecmsgoperand",  l.modsecmsgoperand);
-    add_assoc_string(&arr, "modsecmsgtrgname",  l.modsecmsgtrgname);
-    add_assoc_string(&arr, "modsecmsgtrgvalue", l.modsecmsgtrgvalue);
-    add_assoc_string(&arr, "ruleerror",     l.ruleerror);
-    add_assoc_string(&arr, "file",          l.file);
-    add_assoc_string(&arr, "line",          l.line);
-    add_assoc_string(&arr, "id",            l.id);
-    add_assoc_string(&arr, "rev",           l.rev);
-    add_assoc_string(&arr, "msg",           l.msg);
-    add_assoc_string(&arr, "data",          l.data);
-    add_assoc_string(&arr, "severity",      l.severity);
-    add_assoc_string(&arr, "version",       l.version);
-    add_assoc_string(&arr, "maturity",      l.maturity);
-    add_assoc_string(&arr, "accuracy",      l.accuracy);
+    array_init(return_value);
 
-    add_assoc_long(&arr,   "tagcnt",        l.tagcnt);
+    add_assoc_long(return_value,   "entry_is_modsecline",       l.entry_is_modsecline);
+    add_assoc_long(return_value,   "entry_is_broken",           l.entry_is_broken);
+    add_assoc_long(return_value,   "log_entry_raw_length",      l.log_entry_raw_length);
+    add_assoc_string(return_value, "log_date_iso",              l.log_date_iso);
+    add_assoc_double(return_value, "log_date_timestamp",        l.log_date_timestamp);
+    add_assoc_string(return_value, "log_client",                l.log_client);
+    add_assoc_long(return_value,   "log_entry_class",           l.log_entry_class);
+    add_assoc_string(return_value, "log_modsec_msg",            l.log_modsec_msg);
+    add_assoc_long(return_value,   "log_modsec_msg_length",     l.log_modsec_msg_length);
+    add_assoc_string(return_value, "log_modsec_reason",         l.log_modsec_reason);
+    add_assoc_string(return_value, "log_modsec_operator",       l.log_modsec_operator);
+    add_assoc_string(return_value, "log_modsec_operand",        l.log_modsec_operand);
+    add_assoc_string(return_value, "log_modsec_target_name",    l.log_modsec_target_name);
+    add_assoc_string(return_value, "log_modsec_target_value",   l.log_modsec_target_value);
+    add_assoc_string(return_value, "log_modsec_process_error",  l.log_modsec_process_error);
+    add_assoc_string(return_value, "log_rule_file",             l.log_rule_file);
+    add_assoc_string(return_value, "log_rule_line",             l.log_rule_line);
+    add_assoc_string(return_value, "log_rule_id",               l.log_rule_id);
+    add_assoc_string(return_value, "log_rule_rev",              l.log_rule_rev);
+    add_assoc_string(return_value, "log_rule_msg",              l.log_rule_msg);
+    add_assoc_string(return_value, "log_rule_data",             l.log_rule_data);
+    add_assoc_string(return_value, "log_rule_severity",         l.log_rule_severity);
+    add_assoc_string(return_value, "log_rule_version",          l.log_rule_version);
+    add_assoc_string(return_value, "log_rule_maturity",         l.log_rule_maturity);
+    add_assoc_string(return_value, "log_rule_accuracy",         l.log_rule_accuracy);
+
+    add_assoc_long(return_value,   "log_rule_tags_cnt",         l.log_rule_tags_cnt);
 
     array_init(&tags);
-    for(size_t ti = 0; ti < l.tagcnt; ti++) {
-        add_next_index_string(&tags, l.tags);
-        l.tags += strlen(l.tags) + 1;
+    for(size_t ti = 0; ti < l.log_rule_tags_cnt; ti++) {
+        add_next_index_string(&tags, l.log_rule_tags);
+        l.log_rule_tags += strlen(l.log_rule_tags) + 1;
     }
-    add_assoc_zval(&arr, "tags", &tags);
+    add_assoc_zval(return_value, "log_rule_tags", &tags);
 
-    add_assoc_string(&arr, "hostname",      l.hostname);
-    add_assoc_string(&arr, "uri",           l.uri);
-    add_assoc_string(&arr, "unique_id",     l.unique_id);
+    add_assoc_string(return_value, "log_hostname",      l.log_hostname);
+    add_assoc_string(return_value, "log_uri",           l.log_uri);
+    add_assoc_string(return_value, "log_unique_id",     l.log_unique_id);
 
-    add_assoc_long(&arr,   "lineerrcnt",    l.lineerrcnt);
+    add_assoc_long(return_value,   "log_entry_errors_cnt",    l.log_entry_errors_cnt);
     array_init(&errors);
     array_init(&errorspos);
 
-    if (l.lineerrcnt > 0) {
+    if (l.log_entry_errors_cnt > 0) {
         // reset errpool ptr
         l.lineerrpool.currptr = l.lineerrpool.pool;
         msclogerr logerr;
-        for (int c=0; c < l.lineerrcnt; c++) {
+        for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
             add_next_index_string(&errors, logerr.errmsg);
             zval pairs;
@@ -158,17 +166,14 @@ PHP_FUNCTION(parse)
         }
     }
 
-    add_assoc_zval(&arr, "lineerrors", &errors);
-    add_assoc_zval(&arr, "lineerrorspos", &errorspos);
-
-
-    RETURN_ZVAL(&arr, 0, 1);
+    add_assoc_zval(return_value, "log_entry_errors", &errors);
+    add_assoc_zval(return_value, "log_entry_errors_pos", &errorspos);
 
 }
 
 // functions
 static const zend_function_entry mscphplogparser_functions[] = {
-    PHP_FE(parse,        NULL)
+    PHP_FE(parse,        arginfo_parse)
     PHP_FE_END
 };
 

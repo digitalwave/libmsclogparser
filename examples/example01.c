@@ -49,16 +49,16 @@ int main(int argc, char ** argv) {
         if (len > 0) {
             printf("Nr: %zu\n", li++);
             memset(&l, '\0', sizeof(logdata));
-            l.is_modsecline = 0;
+            l.entry_is_modsecline = 0;
             parse(line, len, t, &l);
-            if (l.is_modsecline == 1) {
-                printf("Type of log: '%s'\n", typeoflog[l.modseclinetype]);
-                if (l.is_broken == 1) {
-                    printf("Errcnt: %d\n", l.lineerrcnt);
-                    if (l.lineerrcnt > 0) {
+            if (l.entry_is_modsecline == 1) {
+                printf("Type of log: '%s'\n", typeoflog[l.log_entry_class]);
+                if (l.entry_is_broken == 1) {
+                    printf("Errcnt: %d\n", l.log_entry_errors_cnt);
+                    if (l.log_entry_errors_cnt > 0) {
                         // reset errpool ptr
                         l.lineerrpool.currptr = l.lineerrpool.pool;
-                        for (int c=0; c < l.lineerrcnt; c++) {
+                        for (int c=0; c < l.log_entry_errors_cnt; c++) {
                             msclogerr err;
                             read_msclog_err(&l.lineerrpool, &err);
                             printf("%s - %zu:%zu\n", err.errmsg, *err.startpos, *err.endpos);
@@ -66,41 +66,40 @@ int main(int argc, char ** argv) {
                     }
                     printf("%s", line);
                 }
-                printf("date: '%s'\n", l.date_iso);
-                printf("ts: '%lf'\n", l.date_epoch);
-                printf("client: '%s'\n", l.client);
-                printf("msg: '%s'\n", l.modsecmsg);
-                printf("denymsg: '%s'\n", l.modsecdenymsg);
-                printf("msgreason: '%s'\n", l.modsecmsgreason);
-                printf("msgop: '%s'\n", l.modsecmsgop);
-                printf("msgoperand: '%s'\n", l.modsecmsgoperand);
-                printf("msgtrgname: '%s'\n", l.modsecmsgtrgname);
-                printf("msgtrgvalue: '%s'\n", l.modsecmsgtrgvalue);
-                printf("rule err: '%s'\n", l.ruleerror);
+                printf("date: '%s'\n", l.log_date_iso);
+                printf("ts: '%lf'\n", l.log_date_timestamp);
+                printf("client: '%s'\n", l.log_client);
+                printf("msg: '%s'\n", l.log_modsec_msg);
+                printf("msgreason: '%s'\n", l.log_modsec_reason);
+                printf("msgop: '%s'\n", l.log_modsec_operator);
+                printf("msgoperand: '%s'\n", l.log_modsec_operand);
+                printf("msgtrgname: '%s'\n", l.log_modsec_target_name);
+                printf("msgtrgvalue: '%s'\n", l.log_modsec_target_value);
+                printf("rule err: '%s'\n", l.log_modsec_process_error);
                 printf(" file: '%s'\n line: '%s'\n id: '%s'\n rev: '%s'\n msg: '%s'\n data: '%s'\n severity: '%s'\n version: '%s'\n maturity: '%s'\n accuracy: '%s'\n",
-                    l.file,
-                    l.line,
-                    l.id,
-                    l.rev,
-                    l.msg,
-                    l.data,
-                    l.severity,
-                    l.version,
-                    l.maturity,
-                    l.accuracy
+                    l.log_rule_file,
+                    l.log_rule_line,
+                    l.log_rule_id,
+                    l.log_rule_rev,
+                    l.log_rule_msg,
+                    l.log_rule_data,
+                    l.log_rule_severity,
+                    l.log_rule_version,
+                    l.log_rule_maturity,
+                    l.log_rule_accuracy
                 );
-                printf(" tagcnt: '%zu'\n", l.tagcnt);
-                if (l.tagcnt > 0) {
+                printf(" tagcnt: '%zu'\n", l.log_rule_tags_cnt);
+                if (l.log_rule_tags_cnt > 0) {
                     printf(" tags:");
-                    for (size_t ti = 0; ti < l.tagcnt; ti++) {
-                        printf(" '%s'", l.tags);
-                        l.tags += strlen(l.tags) + 1;
+                    for (size_t ti = 0; ti < l.log_rule_tags_cnt; ti++) {
+                        printf(" '%s'", l.log_rule_tags);
+                        l.log_rule_tags += strlen(l.log_rule_tags) + 1;
                     }
                     printf("\n");
                 }
-                printf(" hostname: '%s'\n", l.hostname);
-                printf(" uri: '%s'\n", l.uri);
-                printf(" unique_id: '%s'\n", l.unique_id);
+                printf(" hostname: '%s'\n", l.log_hostname);
+                printf(" uri: '%s'\n", l.log_uri);
+                printf(" unique_id: '%s'\n", l.log_unique_id);
             }
             else {
                 printf("Not a modsecurity line\n");

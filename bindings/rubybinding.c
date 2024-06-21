@@ -50,7 +50,7 @@ modsecurity@digitalwave.hu
 
 #include "msclogparser.h"
 
-#define MODULE_VERSION "0.1.0"
+#define MODULE_VERSION "0.2.0"
 
 static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE arg3) {
 
@@ -65,63 +65,60 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
 
     VALUE result = rb_hash_new();
 
-    rb_hash_aset(result, ID2SYM(rb_intern("linelen")), INT2NUM(l.linelen));
-    rb_hash_aset(result, ID2SYM(rb_intern("is_modsecline")), INT2NUM(l.is_modsecline));
-    rb_hash_aset(result, ID2SYM(rb_intern("is_broken")), INT2NUM(l.is_broken));
-    rb_hash_aset(result, ID2SYM(rb_intern("date_iso")), rb_str_new2(l.date_iso));
-    rb_hash_aset(result, ID2SYM(rb_intern("date_epoch")), DBL2NUM(l.date_epoch));
-    rb_hash_aset(result, ID2SYM(rb_intern("client")), rb_str_new2(l.client));
-    rb_hash_aset(result, ID2SYM(rb_intern("modseclinetype")), INT2NUM(l.modseclinetype));
-    rb_hash_aset(result, ID2SYM(rb_intern("modsecmsg")), rb_str_new2(l.modsecmsg));
-    rb_hash_aset(result, ID2SYM(rb_intern("modsecmsglen")), INT2NUM(l.modsecmsglen));
-    rb_hash_aset(result, ID2SYM(rb_intern("modsecdenymsg")), rb_str_new2(l.modsecdenymsg));
-    rb_hash_aset(result, ID2SYM(rb_intern("modsecmsgreason")), rb_str_new2(l.modsecmsgreason));
-    rb_hash_aset(result, ID2SYM(rb_intern("modsecmsgop")), rb_str_new2(l.modsecmsgop));
-    rb_hash_aset(result, ID2SYM(rb_intern("modsecmsgoperand")), rb_str_new2(l.modsecmsgoperand));
-    rb_hash_aset(result, ID2SYM(rb_intern("modsecmsgtrgname")), rb_str_new2(l.modsecmsgtrgname));
-    rb_hash_aset(result, ID2SYM(rb_intern("modsecmsgtrgvalue")), rb_str_new2(l.modsecmsgtrgvalue));
-    rb_hash_aset(result, ID2SYM(rb_intern("ruleerror")), rb_str_new2(l.ruleerror));
-    rb_hash_aset(result, ID2SYM(rb_intern("file")), rb_str_new2(l.file));
-    rb_hash_aset(result, ID2SYM(rb_intern("line")), rb_str_new2(l.line));
-    rb_hash_aset(result, ID2SYM(rb_intern("id")), rb_str_new2(l.id));
+    rb_hash_aset(result, ID2SYM(rb_intern("entry_is_broken")), INT2NUM(l.entry_is_broken));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_raw_length")), INT2NUM(l.log_entry_raw_length));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_date_iso")), rb_str_new2(l.log_date_iso));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_date_timestamp")), DBL2NUM(l.log_date_timestamp));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_client")), rb_str_new2(l.log_client));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_class")), INT2NUM(l.log_entry_class));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_modsec_msg")), rb_str_new2(l.log_modsec_msg));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_modsec_msg_length")), INT2NUM(l.log_modsec_msg_length));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_modsec_reason")), rb_str_new2(l.log_modsec_reason));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_modsec_operator")), rb_str_new2(l.log_modsec_operator));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_modsec_operand")), rb_str_new2(l.log_modsec_operand));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_modsec_target_name")), rb_str_new2(l.log_modsec_target_name));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_modsec_target_value")), rb_str_new2(l.log_modsec_target_value));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_modsec_process_error")), rb_str_new2(l.log_modsec_process_error));
 
-    rb_hash_aset(result, ID2SYM(rb_intern("rev")), rb_str_new2(l.rev));
-    rb_hash_aset(result, ID2SYM(rb_intern("msg")), rb_str_new2(l.msg));
-    rb_hash_aset(result, ID2SYM(rb_intern("data")), rb_str_new2(l.data));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_file")), rb_str_new2(l.log_rule_file));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_line")), rb_str_new2(l.log_rule_line));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_id")), rb_str_new2(l.log_rule_id));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_rev")), rb_str_new2(l.log_rule_rev));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_msg")), rb_str_new2(l.log_rule_msg));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_data")), rb_str_new2(l.log_rule_data));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_severity")), rb_str_new2(l.log_rule_severity));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_version")), rb_str_new2(l.log_rule_version));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_maturity")), rb_str_new2(l.log_rule_maturity));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_accuracy")), rb_str_new2(l.log_rule_accuracy));
 
-    rb_hash_aset(result, ID2SYM(rb_intern("severity")), rb_str_new2(l.severity));
-    rb_hash_aset(result, ID2SYM(rb_intern("version")), rb_str_new2(l.version));
-    rb_hash_aset(result, ID2SYM(rb_intern("maturity")), rb_str_new2(l.maturity));
-    rb_hash_aset(result, ID2SYM(rb_intern("accuracy")), rb_str_new2(l.accuracy));
-
-    rb_hash_aset(result, ID2SYM(rb_intern("tagcnt")), INT2NUM(l.tagcnt));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_tags_cnt")), INT2NUM(l.log_rule_tags_cnt));
 
     VALUE tags = rb_ary_new();
-    for(size_t ti = 0; ti < l.tagcnt; ti++) {
-        rb_ary_push(tags, rb_str_new2(l.tags));
-        l.tags += strlen(l.tags);
+    for(size_t ti = 0; ti < l.log_rule_tags_cnt; ti++) {
+        rb_ary_push(tags, rb_str_new2(l.log_rule_tags));
+        l.log_rule_tags += strlen(l.log_rule_tags);
     }
-    rb_hash_aset(result, ID2SYM(rb_intern("tags")), tags);
+    rb_hash_aset(result, ID2SYM(rb_intern("log_rule_tags")), tags);
 
-    rb_hash_aset(result, ID2SYM(rb_intern("hostname")), rb_str_new2(l.hostname));
-    rb_hash_aset(result, ID2SYM(rb_intern("uri")), rb_str_new2(l.uri));
-    rb_hash_aset(result, ID2SYM(rb_intern("unique_id")), rb_str_new2(l.unique_id));
-    rb_hash_aset(result, ID2SYM(rb_intern("lineerrcnt")), INT2NUM(l.lineerrcnt));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_hostname")), rb_str_new2(l.log_hostname));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_uri")), rb_str_new2(l.log_uri));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_unique_id")), rb_str_new2(l.log_unique_id));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_cnt")), INT2NUM(l.log_entry_errors_cnt));
 
     VALUE errors = rb_ary_new();
     VALUE errorspos = rb_ary_new();
-    if (l.lineerrcnt > 0) {
+    if (l.log_entry_errors_cnt > 0) {
         // reset errpool ptr
         l.lineerrpool.currptr = l.lineerrpool.pool;
         msclogerr logerr;
-        for(int c = 0; c < l.lineerrcnt; c++) {
+        for(int c = 0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
             rb_ary_push(errors, rb_str_new2(logerr.errmsg));
             rb_ary_push(errorspos, rb_ary_new3(2, INT2NUM(*logerr.startpos), INT2NUM(*logerr.endpos)));
         }
     }
-    rb_hash_aset(result, ID2SYM(rb_intern("lineerrors")), errors);
-    rb_hash_aset(result, ID2SYM(rb_intern("lineerrorspos")), errorspos);
+    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors")), errors);
+    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_pos")), errorspos);
 
 
     return result;

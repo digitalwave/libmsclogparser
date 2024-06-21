@@ -15,8 +15,8 @@ if (!extension_loaded('mscphplogparser')) {
 //var_dump(LOGMSG_ERROR);
 //var_dump(LOGMSG_AUDITLOG);
 
-var_dump(LIBRARY_VERSION);
-var_dump(MODULE_VERSION);
+///var_dump(LIBRARY_VERSION);
+///var_dump(MODULE_VERSION);
 
 if (count($argv) < 3) {
     echo "Argument missing!\n";
@@ -25,7 +25,8 @@ if (count($argv) < 3) {
 
 $logtype = NULL;
 if ($argv[2] == "apache") {
-    $logtype = LOG_TYPE_APACHE;
+    //$logtype = LOG_TYPE_APACHE;
+$logtype = 0;
 }
 elseif ($argv[2] == "nginx") {
     $logtype = LOG_TYPE_NGINX;
@@ -35,11 +36,13 @@ else {
     exit;
 }
 
+$li = 1;
 $fp = fopen($argv[1], "r");
 if ($fp) {
     while (($line = fgets($fp)) !== false) {
         $len = strlen($line);
         echo json_encode(parse($line, $len, $logtype)) . "\n";
+        $li++;
     }
     fclose($fp);
 }

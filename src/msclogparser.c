@@ -92,7 +92,7 @@ static char * mscl_stradd(logdata *l, char *src, size_t srclen) {
 }
 
 static void set_error(logdata *l, char *errmsg, size_t pos0, size_t pos1) {
-    l->is_broken = 1;
+    l->entry_is_broken = 1;
     size_t len = strlen(errmsg);
 
     strcpy(l->lineerrpool.currptr, errmsg);
@@ -107,7 +107,7 @@ static void set_error(logdata *l, char *errmsg, size_t pos0, size_t pos1) {
     l->lineerrpool.offset += sizeof(size_t);
     l->lineerrpool.currptr = l->lineerrpool.pool + l->lineerrpool.offset;
 
-    l->lineerrcnt++;
+    l->log_entry_errors_cnt++;
 
     return;
 }
@@ -167,10 +167,10 @@ static int parse_date_apache(char * line, logdata *l) {
 
     char date[20] = {0};
     sprintf(date, "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-    l->date_iso = mscl_stradd(l, date, 19);
+    l->log_date_iso = mscl_stradd(l, date, 19);
     float mili = strtof(millisec, NULL);
-    l->date_epoch = mktime(&tm);
-    l->date_epoch += mili;
+    l->log_date_timestamp = mktime(&tm);
+    l->log_date_timestamp += mili;
 
     return 0;
 }
@@ -191,8 +191,8 @@ static int parse_date_nginx(char * line, logdata *l) {
 
     char date[20] = {0};
     sprintf(date, "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-    l->date_iso = mscl_stradd(l, date, 19);
-    l->date_epoch = mktime(&tm);
+    l->log_date_iso = mscl_stradd(l, date, 19);
+    l->log_date_timestamp = mktime(&tm);
 
     return 0;
 }
@@ -342,19 +342,19 @@ void parse_ap_warning_message(logdata *l) {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^ to here
     size_t msgpos = 9;
 
-    mcnt = find_pattern(l->modsecmsg, msgpos, l->modsecmsglen, "\"", 1, &matches, MATCH_FIRST);
+    mcnt = find_pattern(l->log_modsec_msg, msgpos, l->log_modsec_msg_length, "\"", 1, &matches, MATCH_FIRST);
     if (mcnt == 0) {
-        mcnt = find_pattern(l->modsecmsg, msgpos, l->modsecmsglen, " at ", 4, &matches, MATCH_FIRST);
+        mcnt = find_pattern(l->log_modsec_msg, msgpos, l->log_modsec_msg_length, " at ", 4, &matches, MATCH_FIRST);
         if (mcnt == 0) {
             // first case above - there is no '"' and no ' at ' therefore no '" at '
             // eg 'detected XSS using libinjection.'
             size_t startpos = 9; // length of "Warning. "
-            size_t slen = l->modsecmsglen - startpos;
-            if (l->modsecmsg[l->modsecmsglen-1] == '.') {
+            size_t slen = l->log_modsec_msg_length - startpos;
+            if (l->log_modsec_msg[l->log_modsec_msg_length-1] == '.') {
                 // skip '.'
                 slen--;
             }
-            l->modsecmsgreason = mscl_stradd(l, l->modsecmsg + startpos, slen);
+            l->log_modsec_reason = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
         }
         else {
             // second case above
@@ -362,14 +362,14 @@ void parse_ap_warning_message(logdata *l) {
             //                                          matches[0]--^  ^--matches[0] + matches[1]
             size_t startpos = 9; // length of "Warning. "
             size_t slen = matches[0] - startpos;
-            l->modsecmsgreason = mscl_stradd(l, l->modsecmsg + startpos, slen);
+            l->log_modsec_reason = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
             startpos = matches[0]+matches[1];
-            slen = l->modsecmsglen - startpos;
-            if (l->modsecmsg[l->modsecmsglen-1] == '.') {
+            slen = l->log_modsec_msg_length - startpos;
+            if (l->log_modsec_msg[l->log_modsec_msg_length-1] == '.') {
                 // skip '.'
                 slen--;
             }
-            l->modsecmsgtrgname = mscl_stradd(l, l->modsecmsg + startpos, slen);
+            l->log_modsec_target_name = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
         }
     }
     else {
@@ -378,13 +378,13 @@ void parse_ap_warning_message(logdata *l) {
         // matches[0] points here -^
         size_t startpos = 9; // len of "Warning. "
         size_t slen = matches[0] - 10; // +1 is because of the space, eg: 'Matched phrase "...' after 'phrase ' or 'within '
-        l->modsecmsgreason = mscl_stradd(l, l->modsecmsg + startpos, slen);
+        l->log_modsec_reason = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
         msgpos = matches[0] + matches[1];
         memset(matches, '\0', sizeof(size_t)*2);
-        mcnt = find_pattern(l->modsecmsg, msgpos, l->modsecmsglen, "\" at ", 5, &matches, MATCH_FIRST);
+        mcnt = find_pattern(l->log_modsec_msg, msgpos, l->log_modsec_msg_length, "\" at ", 5, &matches, MATCH_FIRST);
         size_t endoffset = 1;
         if (mcnt == 0) {
-            mcnt = find_pattern(l->modsecmsg, msgpos, l->modsecmsglen, "\" against \"", 11, &matches, MATCH_FIRST);
+            mcnt = find_pattern(l->log_modsec_msg, msgpos, l->log_modsec_msg_length, "\" against \"", 11, &matches, MATCH_FIRST);
             // '" against "' occurrs only in regex message, and follows the " required." at the end, with length of 10 + '"' before := 11
             endoffset = 11;
         }
@@ -396,20 +396,20 @@ void parse_ap_warning_message(logdata *l) {
             startpos = startpos + slen + 2;
             // slen is new match[0] (prev. of found pos) - startpos
             slen = matches[0] - startpos;
-            l->modsecmsgoperand = mscl_stradd(l, l->modsecmsg + startpos, slen);
+            l->log_modsec_operand = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
             // check whether the last char is a '.'. This means there is the end of the warning message
-            if (l->modsecmsg[l->modsecmsglen-1] == '.') {
+            if (l->log_modsec_msg[l->log_modsec_msg_length-1] == '.') {
                 startpos = matches[0] + matches[1];
-                slen = l->modsecmsglen - startpos - endoffset;
-                l->modsecmsgtrgname = mscl_stradd(l, l->modsecmsg + startpos, slen);
+                slen = l->log_modsec_msg_length - startpos - endoffset;
+                l->log_modsec_target_name = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
             }
             else {
                 msgpos = matches[0] + matches[1];
                 memset(matches, '\0', sizeof(size_t)*2);
-                mcnt = find_pattern(l->modsecmsg, startpos, l->modsecmsglen, ". ", 11, &matches, MATCH_FIRST);
+                mcnt = find_pattern(l->log_modsec_msg, startpos, l->log_modsec_msg_length, ". ", 11, &matches, MATCH_FIRST);
                 if (mcnt == 1) {
                     slen = matches[0]-msgpos;
-                    l->modsecmsgtrgname = mscl_stradd(l, l->modsecmsg + msgpos, slen);
+                    l->log_modsec_target_name = mscl_stradd(l, l->log_modsec_msg + msgpos, slen);
                 }
             }
         }
@@ -440,61 +440,61 @@ void parse_ngx_warning_message(logdata *l) {
     // in case of "Access denied..." the modsecdenymsg is already filled, only need to parse the rest
     // this means we can start by "Matched...", so 2nd and 3rd cases almost are the same
 
-    size_t offset = (l->modseclinetype == LOGMSG_ACCDENIED) ? 39 : 9;  // 'Access denied with code 403 (phase 2). ' || 'Warning. '
+    size_t offset = (l->log_entry_class == LOGMSG_ACCDENIED) ? 39 : 9;  // 'Access denied with code 403 (phase 2). ' || 'Warning. '
     size_t matches[2];
     memset(matches, '\0', sizeof(size_t)*2);
     int mcnt;
 
-    mcnt = find_pattern(l->modsecmsg, offset, l->linelen, "Matched \"Operator `", 19, &matches, MATCH_FIRST);
+    mcnt = find_pattern(l->log_modsec_msg, offset, l->log_entry_raw_length, "Matched \"Operator `", 19, &matches, MATCH_FIRST);
     if (mcnt == 0) {
         // fist case above
         // copy the message without 'Warning. '
-        l->modsecmsgreason = mscl_stradd(l, l->modsecmsg+9, l->modsecmsglen-10);
+        l->log_modsec_reason = mscl_stradd(l, l->log_modsec_msg+9, l->log_modsec_msg_length-10);
     }
     else {
         size_t startpos = matches[0] + matches[1]; // 'Matched "Operator `'
         memset(&matches, '\0', sizeof(size_t)*2);
-        mcnt = find_pattern(l->modsecmsg, startpos, l->linelen, "' with parameter `", 18, &matches, MATCH_FIRST);
+        mcnt = find_pattern(l->log_modsec_msg, startpos, l->log_entry_raw_length, "' with parameter `", 18, &matches, MATCH_FIRST);
         if (mcnt == 1) {
             size_t slen = matches[0]-startpos;
-            l->modsecmsgop = mscl_stradd(l, l->modsecmsg+startpos, slen);
+            l->log_modsec_operator = mscl_stradd(l, l->log_modsec_msg+startpos, slen);
 
             startpos = matches[0] + matches[1];
             memset(&matches, '\0', sizeof(size_t)*2);
             // find "' against variable `"
-            mcnt = find_pattern(l->modsecmsg, startpos, l->modsecmsglen, "' against variable `", 20, &matches, MATCH_FIRST);
+            mcnt = find_pattern(l->log_modsec_msg, startpos, l->log_modsec_msg_length, "' against variable `", 20, &matches, MATCH_FIRST);
             if (mcnt > 0) {
                 slen = matches[0]-startpos;
-                l->modsecmsgoperand = mscl_stradd(l, l->modsecmsg+startpos, slen);
+                l->log_modsec_operand = mscl_stradd(l, l->log_modsec_msg+startpos, slen);
 
                 startpos = matches[0] + matches[1];
                 memset(&matches, '\0', sizeof(size_t)*2);
-                mcnt = find_pattern(l->modsecmsg, startpos, l->modsecmsglen, "' (Value: `", 11, &matches, MATCH_LAST);
+                mcnt = find_pattern(l->log_modsec_msg, startpos, l->log_modsec_msg_length, "' (Value: `", 11, &matches, MATCH_LAST);
                 if (mcnt > 0) {
                     slen = matches[0]-startpos;
-                    l->modsecmsgtrgname = mscl_stradd(l, l->modsecmsg+startpos, slen);
+                    l->log_modsec_target_name = mscl_stradd(l, l->log_modsec_msg+startpos, slen);
 
                     startpos = matches[0] + matches[1];
                     memset(&matches, '\0', sizeof(size_t)*2);
-                    mcnt = find_pattern(l->modsecmsg, startpos, l->modsecmsglen, "' )", 3, &matches, MATCH_LAST);
+                    mcnt = find_pattern(l->log_modsec_msg, startpos, l->log_modsec_msg_length, "' )", 3, &matches, MATCH_LAST);
                     if (mcnt > 0) {
                         slen = matches[0]-startpos;
-                        l->modsecmsgtrgvalue = mscl_stradd(l, l->modsecmsg+startpos, slen);
+                        l->log_modsec_target_value = mscl_stradd(l, l->log_modsec_msg+startpos, slen);
                     }
                     else {
-                        set_error(l, "Can't find \"' )\"", startpos, l->modsecmsglen);
+                        set_error(l, "Can't find \"' )\"", startpos, l->log_modsec_msg_length);
                     }
                 }
                 else {
-                    set_error(l, "Can't find \"' (Value: `\"", startpos, l->modsecmsglen);
+                    set_error(l, "Can't find \"' (Value: `\"", startpos, l->log_modsec_msg_length);
                 }
             }
             else {
-                set_error(l, "Can't find \"' against variable '\"", startpos, l->modsecmsglen);
+                set_error(l, "Can't find \"' against variable '\"", startpos, l->log_modsec_msg_length);
             }
         }
         else {
-            set_error(l, "Can't find pattern \"' with parameter `\"", startpos, l->modsecmsglen);
+            set_error(l, "Can't find pattern \"' with parameter `\"", startpos, l->log_modsec_msg_length);
         }
     }
 }
@@ -506,40 +506,40 @@ static void find_tags(char *line, size_t *offset, logdata *l) {
     char *tagbck = NULL;
     size_t pos = *offset;
 
-    while (pos < l->linelen && mcnt > 0) {
+    while (pos < l->log_entry_raw_length && mcnt > 0) {
         int k = matches[0]+2;
         pos = matches[0] + matches[1];
 
         memset(matches, '\0', sizeof(size_t)*2);
-        mcnt = find_pattern(line, pos, l->linelen, " [tag \"", 3, &matches, MATCH_FIRST);
+        mcnt = find_pattern(line, pos, l->log_entry_raw_length, " [tag \"", 3, &matches, MATCH_FIRST);
         // if there is no more '[tag]' field, we have to find the '[hostname]'
         if (mcnt == 0) {
-            size_t tempcnt = find_pattern(line, pos, l->linelen, " [hostname \"", 3, &matches, MATCH_FIRST);
+            size_t tempcnt = find_pattern(line, pos, l->log_entry_raw_length, " [hostname \"", 3, &matches, MATCH_FIRST);
             // if there is no '[hostname]', the line is broken
             if (tempcnt == 0) {
-                set_error(l, "Can't find [hostname] field!", pos, l->linelen);
+                set_error(l, "Can't find [hostname] field!", pos, l->log_entry_raw_length);
                 break;
             }
         }
 
         size_t errpos[2] = { 0, 0 };
         int is_broken = 0;
-        copy_str_from_line(l, line, &l->tags, k, matches[0], 50, &errpos, &is_broken);
-        if (l->tagcnt == 0) {
+        copy_str_from_line(l, line, &l->log_rule_tags, k, matches[0], 50, &errpos, &is_broken);
+        if (l->log_rule_tags_cnt == 0) {
             // save the first ptr
-            tagbck = l->tags;
+            tagbck = l->log_rule_tags;
         }
-        l->tagcnt++;
+        l->log_rule_tags_cnt++;
         if (is_broken == 1) {
             char err[50];
-            sprintf(err, "The %zu. [tag] field is truncated!", l->tagcnt);
+            sprintf(err, "The %zu. [tag] field is truncated!", l->log_rule_tags_cnt);
             set_error(l, err, errpos[0], errpos[1]);
             break;
         }
     }
     if (tagbck != NULL) {
-        // restore l->tags to the first tag
-        l->tags = tagbck;
+        // restore l->log_rule_tags to the first tag
+        l->log_rule_tags = tagbck;
     }
 }
 
@@ -559,15 +559,15 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     char tbuff[tlen+1];
 
     memset(&matches, '\0', sizeof(size_t)*2);
-    mcnt = find_pattern(line, *startpos, l->linelen, "[hostname \"", 11, &matches, MATCH_LAST);
+    mcnt = find_pattern(line, *startpos, l->log_entry_raw_length, "[hostname \"", 11, &matches, MATCH_LAST);
     if (mcnt > 0) {
         k = matches[0] + matches[1];
         t = 0;
-        while(k < l->linelen && line[k] != '"' && line[k] != '\0' && t < tlen) {
+        while(k < l->log_entry_raw_length && line[k] != '"' && line[k] != '\0' && t < tlen) {
             tbuff[t++] = line[k++];
         }
-        if (k == l->linelen) {
-            set_error(l, "[hostname] field is truncated!", *startpos, l->linelen);
+        if (k == l->log_entry_raw_length) {
+            set_error(l, "[hostname] field is truncated!", *startpos, l->log_entry_raw_length);
             return;
         }
         // 'hostname' is relevant only if type of log is Apache
@@ -575,7 +575,7 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
         // have to process that later - see end of this function
         if (linetype == LOG_TYPE_APACHE) {
             tbuff[t] = '\0';
-            l->hostname = mscl_stradd(l, tbuff, t);
+            l->log_hostname = mscl_stradd(l, tbuff, t);
             *startpos = k;
             if (tailstart != NULL) {
                 *tailstart = matches[0];
@@ -584,35 +584,35 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     }
     else {
         // broken line
-        set_error(l, "Can't find [hostname] field!", *startpos, l->linelen);
+        set_error(l, "Can't find [hostname] field!", *startpos, l->log_entry_raw_length);
         return;
     }
 
     memset(&matches, '\0', sizeof(size_t)*2);
     int uniquefirst = 0;
-    mcnt = find_pattern(line, hostlast, l->linelen, "[unique_id \"", 12, &matches, MATCH_LAST);
+    mcnt = find_pattern(line, hostlast, l->log_entry_raw_length, "[unique_id \"", 12, &matches, MATCH_LAST);
     if (mcnt > 0) {
         k = matches[0] + matches[1];
         t = 0;
-        while(k < l->linelen && line[k] != '"' && t < tlen) {
+        while(k < l->log_entry_raw_length && line[k] != '"' && t < tlen) {
             tbuff[t++] = line[k++];
         }
-        if (k == l->linelen) {
-            set_error(l, "[unique_id] field is truncated!", *startpos, l->linelen);
+        if (k == l->log_entry_raw_length) {
+            set_error(l, "[unique_id] field is truncated!", *startpos, l->log_entry_raw_length);
             return;
         }
         tbuff[t] = '\0';
-        l->unique_id = mscl_stradd(l, tbuff, t);
+        l->log_unique_id = mscl_stradd(l, tbuff, t);
         uniquefirst = matches[0];
     }
     else {
         // broken line
-        set_error(l, "Can't find [unique_id] field!", hostlast, l->linelen);
+        set_error(l, "Can't find [unique_id] field!", hostlast, l->log_entry_raw_length);
         return;
     }
 
     memset(&matches, '\0', sizeof(size_t)*2);
-    mcnt = find_pattern(line, hostlast, l->linelen, "[uri \"", 6, &matches, MATCH_FIRST);
+    mcnt = find_pattern(line, hostlast, l->log_entry_raw_length, "[uri \"", 6, &matches, MATCH_FIRST);
     if (mcnt > 0) {
         k = matches[0] + matches[1];
         t = 0;
@@ -620,20 +620,20 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             tbuff[t++] = line[k++];
         }
         if (k > uniquefirst) {
-            set_error(l, "[uri] field is truncated!", uniquefirst, l->linelen);
+            set_error(l, "[uri] field is truncated!", uniquefirst, l->log_entry_raw_length);
             return;
         }
         t--;
         // remove trailing ' ', ']' and '"' if exists
         while (tbuff[t] == ' ') t--;
-        if (tbuff[t] == ']') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->linelen); }
-        if (tbuff[t] == '"') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->linelen); }
+        if (tbuff[t] == ']') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
+        if (tbuff[t] == '"') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
         tbuff[t+1] = '\0';
-        l->uri = mscl_stradd(l, tbuff, t+1);
+        l->log_uri = mscl_stradd(l, tbuff, t+1);
     }
     else {
         // broken line
-        set_error(l, "Can't find [uri] field!", hostlast, l->linelen);
+        set_error(l, "Can't find [uri] field!", hostlast, l->log_entry_raw_length);
         return;
     }
 
@@ -641,19 +641,19 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     // the last 'host: "..."' field
     if (linetype == LOG_TYPE_NGINX) {
         memset(&matches, '\0', sizeof(size_t)*2);
-        mcnt = find_pattern(line, hostlast, l->linelen, "host: \"", 7, &matches, MATCH_FIRST);
+        mcnt = find_pattern(line, hostlast, l->log_entry_raw_length, "host: \"", 7, &matches, MATCH_FIRST);
         if (mcnt > 0) {
             k = matches[0] + matches[1];
             t = 0;
-            while(k < l->linelen && line[k] != '"' && t < tlen) {
+            while(k < l->log_entry_raw_length && line[k] != '"' && t < tlen) {
                 tbuff[t++] = line[k++];
             }
             tbuff[t] = '\0';
-            l->hostname = mscl_stradd(l, tbuff, t);
+            l->log_hostname = mscl_stradd(l, tbuff, t);
         }
         else {
             // broken line
-            set_error(l, "Can't find 'host: \"\"' field!", hostlast, l->linelen);
+            set_error(l, "Can't find 'host: \"\"' field!", hostlast, l->log_entry_raw_length);
             return;
         }
     }
@@ -669,7 +669,7 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
     // find the ' [file ' pattern, usually it exists
     // its position is the end of the ModSec message
     memset(matches, '\0', sizeof(size_t)*2);
-    mcnt = find_pattern(line, *pos, l->linelen, " [file \"", 8, &matches, MATCH_LAST);
+    mcnt = find_pattern(line, *pos, l->log_entry_raw_length, " [file \"", 8, &matches, MATCH_LAST);
     if (mcnt > 0) {
         char tbuff[4096];
         int pi = 0;
@@ -677,12 +677,12 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
             tbuff[pi++] = line[k];
         }
         tbuff[pi] = '\0';
-        l->modsecmsg = mscl_stradd(l, tbuff, pi);
-        l->modsecmsglen = pi;
+        l->log_modsec_msg = mscl_stradd(l, tbuff, pi);
+        l->log_modsec_msg_length = pi;
     }
     else {
         // if no ' [file ' pattern, the line is broken
-        set_error(l, "Can't find [file] field!", *pos, l->linelen);
+        set_error(l, "Can't find [file] field!", *pos, l->log_entry_raw_length);
         return;
     }
     // store the previous match position (+2 is because we leave the leading ' [')
@@ -712,11 +712,11 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
 
     // find the pattern in the line from the current position,
     // and copy the value if it found
-    while(lastpos-1 < l->linelen && fields[fi][0] != '\0') {
+    while(lastpos-1 < l->log_entry_raw_length && fields[fi][0] != '\0') {
         // if last matches was success, copy the string to its value
         memset(matches, '\0', sizeof(size_t)*2);
         mt = ((fi == 9) ? MATCH_FIRST : MATCH_LAST);
-        mcnt = find_pattern(line, lastpos-1, l->linelen, fields[fi], 3, &matches, mt);
+        mcnt = find_pattern(line, lastpos-1, l->log_entry_raw_length, fields[fi], 3, &matches, mt);
         if (mcnt > 0) {
             // if the found pattern is shorter than given, check
             // whether the next chars are space or '['
@@ -733,62 +733,62 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
             // prev. position in first case is where we found the ' [file ' pattern
             switch (line[k]) {
                 case 'f':
-                    tmp = &l->file;
+                    tmp = &l->log_rule_file;
                     strcpy(tfield, "[file]");
                     maxlen = 256;
                     break;
 
                 case 'l':
-                    tmp = &l->line;
+                    tmp = &l->log_rule_line;
                     strcpy(tfield, "[line]");
                     maxlen = 20;
                     break;
 
                 case 'i':
-                    tmp = &l->id;
+                    tmp = &l->log_rule_id;
                     strcpy(tfield, "[id]");
                     maxlen = 20;
                     break;
 
                 case 'r':
-                    tmp = &l->rev;
+                    tmp = &l->log_rule_rev;
                     strcpy(tfield, "[rev]");
                     maxlen = 20;
                     break;
 
                 case 'm':
                     if (line[k+1] == 's') {
-                        tmp = &l->msg;
+                        tmp = &l->log_rule_msg;
                         strcpy(tfield, "[msg]");
                         maxlen = 512;
                     }
                     else if (line[k+1] == 'a') {
-                        tmp = &l->maturity;
+                        tmp = &l->log_rule_maturity;
                         strcpy(tfield, "[maturity]");
                         maxlen = 20;
                     }
                     break;
 
                 case 'd':
-                    tmp = &l->data;
+                    tmp = &l->log_rule_data;
                     strcpy(tfield, "[data]");
                     maxlen = 1024;
                     break;
 
                 case 's':
-                    tmp = &l->severity;
+                    tmp = &l->log_rule_severity;
                     strcpy(tfield, "[severity]");
                     maxlen = 20;
                     break;
 
                 case 'v':
-                    tmp = &l->version;
+                    tmp = &l->log_rule_version;
                     strcpy(tfield, "[ver]");
                     maxlen = 50;
                     break;
 
                 case 'a':
-                    tmp = &l->accuracy;
+                    tmp = &l->log_rule_accuracy;
                     strcpy(tfield, "[accuracy]");
                     maxlen = 20;
                     break;
@@ -815,7 +815,7 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
                         errpos[1] = errpos[0] + 3;
                     }
                     set_error(l, err, errpos[0], errpos[1]);
-                    //l->is_broken = 0;   // these fields are not mandatory
+                    //l->entry_is_broken = 0;   // these fields are not mandatory
                 }
             }
             else {
@@ -857,7 +857,7 @@ void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype
     // find the ' [id ' pattern, usually it exists
     // its position is the end of the ModSec message
     memset(matches, '\0', sizeof(size_t)*2);
-    mcnt = find_pattern(line, *pos, l->linelen, "[id \"", 5, &matches, MATCH_LAST);
+    mcnt = find_pattern(line, *pos, l->log_entry_raw_length, "[id \"", 5, &matches, MATCH_LAST);
     if (mcnt > 0) {
         int pi = 0;
         // matches[0]-1 because of the leading space in front of
@@ -866,11 +866,11 @@ void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype
             tbuff[pi++] = line[p];
         }
         tbuff[pi] = '\0';
-        l->modsecmsg = mscl_stradd(l, tbuff, pi);
+        l->log_modsec_msg = mscl_stradd(l, tbuff, pi);
     }
     else {
         // if no ' [id ' pattern, the line is broken
-        set_error(l, "Can't find [id] field!", *pos, l->linelen);
+        set_error(l, "Can't find [id] field!", *pos, l->log_entry_raw_length);
         return;
     }
     // store the previous match position (+1 is because we leave the leading '[')
@@ -893,26 +893,26 @@ void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype
     while(fields[fi][0] != '\0') {
         // if last matches was success, copy the string to its value
         memset(matches, '\0', sizeof(size_t)*2);
-        mcnt = find_pattern(line, lastpos-1, l->linelen, fields[fi], 3, &matches, MATCH_FIRST);
+        mcnt = find_pattern(line, lastpos-1, l->log_entry_raw_length, fields[fi], 3, &matches, MATCH_FIRST);
         if (mcnt > 0) {
             k = prevstart;
             // based on first char of previous position we choose the current field
             // prev. position in first case is where we found the ' [id ' pattern
             switch (line[k]) {
                 case 'i':
-                    tmp = l->id;
+                    tmp = l->log_rule_id;
                     strcpy(tfield, "[id]");
                     maxlen = 20;
                     break;
 
                 case 'f':
-                    tmp = l->file;
+                    tmp = l->log_rule_file;
                     strcpy(tfield, "[file]");
                     maxlen = 256;
                     break;
 
                 case 'l':
-                    tmp = l->line;
+                    tmp = l->log_rule_line;
                     strcpy(tfield, "[line]");
                     maxlen = 20;
                     break;
@@ -949,20 +949,20 @@ void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype
             }
         }
         else {
-            l->is_broken = 1;
+            l->entry_is_broken = 1;
             char err[50] = {0};
             sprintf(err, "Can't find field: %s!", fields[fi]);
-            set_error(l, err, *pos, l->linelen);
+            set_error(l, err, *pos, l->log_entry_raw_length);
             return;
         }
         fi++;
     }
 
     memset(matches, '\0', sizeof(size_t)*2);
-    mcnt = find_pattern(line, lastpos-1, l->linelen, "]", 1, &matches, MATCH_FIRST);
+    mcnt = find_pattern(line, lastpos-1, l->log_entry_raw_length, "]", 1, &matches, MATCH_FIRST);
     if (mcnt == 1) {
         k = prevstart;
-        tmp = l->line;
+        tmp = l->log_rule_line;
         maxlen = 20;
 
         size_t errpos[2] = { 0, 0 };
@@ -978,13 +978,13 @@ void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype
     }
     else {
         // broken line, no trailing ']'
-        set_error(l, "Can't find trailing ']' character!", lastpos-1, l->linelen);
+        set_error(l, "Can't find trailing ']' character!", lastpos-1, l->log_entry_raw_length);
         return;
     }
 
     size_t hostpos = 0;
     parse_tail(linetype, line, pos, l, &hostpos);
-    if (l->is_broken == 1) {
+    if (l->entry_is_broken == 1) {
         return;
     }
 
@@ -996,7 +996,7 @@ void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype
     // remove trailing spaces
     while(tbuff[--li] == ' ');
     tbuff[++li] = '\0';
-    l->ruleerror = mscl_stradd(l, tbuff, li);
+    l->log_modsec_process_error = mscl_stradd(l, tbuff, li);
 
     return;
 }
@@ -1017,30 +1017,29 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
     line[len] = '\0';
 
     // initialize string pointers with an empty string
-    l->date_iso          = mscl_stradd(l, "", 0);
-    l->client            = mscl_stradd(l, "", 0);
-    l->modsecmsg         = mscl_stradd(l, "", 0);
-    l->modsecdenymsg     = mscl_stradd(l, "", 0);
-    l->modsecmsgreason   = mscl_stradd(l, "", 0);
-    l->modsecmsgop       = mscl_stradd(l, "", 0);
-    l->modsecmsgoperand  = mscl_stradd(l, "", 0);
-    l->modsecmsgtrgname  = mscl_stradd(l, "", 0);
-    l->modsecmsgtrgvalue = mscl_stradd(l, "", 0);
-    l->ruleerror         = mscl_stradd(l, "", 0);
-    l->file              = mscl_stradd(l, "", 0);
-    l->line              = mscl_stradd(l, "", 0);
-    l->id                = mscl_stradd(l, "", 0);
-    l->rev               = mscl_stradd(l, "", 0);
-    l->msg               = mscl_stradd(l, "", 0);
-    l->data              = mscl_stradd(l, "", 0);
-    l->severity          = mscl_stradd(l, "", 0);
-    l->version           = mscl_stradd(l, "", 0);
-    l->maturity          = mscl_stradd(l, "", 0);
-    l->accuracy          = mscl_stradd(l, "", 0);
-    l->tags              = mscl_stradd(l, "", 0);
-    l->hostname          = mscl_stradd(l, "", 0);
-    l->uri               = mscl_stradd(l, "", 0);
-    l->unique_id         = mscl_stradd(l, "", 0);
+    l->log_date_iso               = mscl_stradd(l, "", 0);
+    l->log_client                 = mscl_stradd(l, "", 0);
+    l->log_modsec_msg             = mscl_stradd(l, "", 0);
+    l->log_modsec_reason          = mscl_stradd(l, "", 0);
+    l->log_modsec_operator        = mscl_stradd(l, "", 0);
+    l->log_modsec_operand         = mscl_stradd(l, "", 0);
+    l->log_modsec_target_name     = mscl_stradd(l, "", 0);
+    l->log_modsec_target_value    = mscl_stradd(l, "", 0);
+    l->log_modsec_process_error   = mscl_stradd(l, "", 0);
+    l->log_rule_file              = mscl_stradd(l, "", 0);
+    l->log_rule_line              = mscl_stradd(l, "", 0);
+    l->log_rule_id                = mscl_stradd(l, "", 0);
+    l->log_rule_rev               = mscl_stradd(l, "", 0);
+    l->log_rule_msg               = mscl_stradd(l, "", 0);
+    l->log_rule_data              = mscl_stradd(l, "", 0);
+    l->log_rule_severity          = mscl_stradd(l, "", 0);
+    l->log_rule_version           = mscl_stradd(l, "", 0);
+    l->log_rule_maturity          = mscl_stradd(l, "", 0);
+    l->log_rule_accuracy          = mscl_stradd(l, "", 0);
+    l->log_rule_tags              = mscl_stradd(l, "", 0);
+    l->log_hostname               = mscl_stradd(l, "", 0);
+    l->log_uri                    = mscl_stradd(l, "", 0);
+    l->log_unique_id              = mscl_stradd(l, "", 0);
 
     if (t == LOG_TYPE_APACHE) {
         // [Thu Sep 22 14:51:12.636955 2022] [:error] [pid 19765:tid 139903325140736] [client 165.232.134.42:52179] [client 165.232.134.42] 
@@ -1059,7 +1058,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
         return 1;
     }
 
-    l->linelen = len;
+    l->log_entry_raw_length = len;
 
     // store position and length
     size_t matches[2];
@@ -1068,7 +1067,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
     int mcnt = find_pattern(line, offset, len, " ModSecurity:", 13, &matches, MATCH_FIRST);
     // continue only if it is there
     if (mcnt == 1) {
-        l->is_modsecline = 1;
+        l->entry_is_modsecline = 1;
         if (t == LOG_TYPE_APACHE) {
             parse_date_apache(line, l);
         }
@@ -1112,7 +1111,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                         client[ci++] = line[k++];
                     }
                     client[ci] = '\0';
-                    l->client = mscl_stradd(l, client, ci);
+                    l->log_client = mscl_stradd(l, client, ci);
                 }
             }
 
@@ -1131,29 +1130,28 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                 mcnt = find_pattern(line, toffset, toffset+8, "Access", 6, &matches, MATCH_FIRST);
             }
             else {
-                l->modseclinetype = LOGMSG_WARNING;
+                l->log_entry_class = LOGMSG_WARNING;
             }
             if (mcnt == 1 && toffset == matches[0]-1) {
                 parse_regular(line, &toffset, l, LOG_TYPE_APACHE);
-                if (l->modseclinetype == LOGMSG_UNKNOWN) {
-                    l->modseclinetype = LOGMSG_ACCDENIED;
-                    l->modsecdenymsg = mscl_stradd(l, l->modsecmsg, l->modsecmsglen);
+                if (l->log_entry_class == LOGMSG_UNKNOWN) {
+                    l->log_entry_class = LOGMSG_ACCDENIED;
                 }
-                if (l->modseclinetype == LOGMSG_WARNING) {
+                if (l->log_entry_class == LOGMSG_WARNING) {
                     parse_ap_warning_message(l);
                 }
             }
             else {
                 mcnt = find_pattern(line, toffset, toffset+6, "Rule", 4, &matches, MATCH_FIRST);
                 if (mcnt == 1) {
-                    l->modseclinetype = LOGMSG_ERROR;
+                    l->log_entry_class = LOGMSG_ERROR;
                     parse_rule_error(line, &toffset, l, LOG_TYPE_APACHE);
                 }
                 else {
                     char tbuff[4096];
                     mcnt = find_pattern(line, toffset, toffset+14, "Request body", 12, &matches, MATCH_FIRST);
                     if (mcnt == 1) {
-                        l->modseclinetype = LOGMSG_REQBODY;
+                        l->log_entry_class = LOGMSG_REQBODY;
                         size_t offs = toffset;
                         size_t hostpos = 0;
                         parse_tail(t, line, &offs, l, &hostpos);
@@ -1164,13 +1162,13 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                                 tbuff[i++] = line[k++];
                             }
                             tbuff[i] = '\0';
-                            l->modsecmsg = mscl_stradd(l, tbuff, i);
+                            l->log_modsec_msg = mscl_stradd(l, tbuff, i);
                         }
                     }
                     else {
                         mcnt = find_pattern(line, toffset, toffset+14, "Audit log", 9, &matches, MATCH_FIRST);
                         if (mcnt == 1) {
-                            l->modseclinetype = LOGMSG_AUDITLOG;
+                            l->log_entry_class = LOGMSG_AUDITLOG;
                             size_t offs = toffset;
                             size_t hostpos = 0;
                             parse_tail(t, line, &offs, l, &hostpos);
@@ -1181,7 +1179,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                                     tbuff[i++] = line[k++];
                                 }
                                 tbuff[i] = '\0';
-                                l->modsecmsg = mscl_stradd(l, tbuff, i);
+                                l->log_modsec_msg = mscl_stradd(l, tbuff, i);
                             }
                         }
                     }
@@ -1201,7 +1199,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                     client[ci++] = line[k++];
                 }
                 client[ci] = '\0';
-                l->client = mscl_stradd(l, client, ci);
+                l->log_client = mscl_stradd(l, client, ci);
                 // possible messages:
                 // 
                 // Matched "Operator `OP' with parameter `PARAM' against variable `VARIABLE' (Value: `VALUE' )
@@ -1209,21 +1207,20 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                 // detected XSS using libinjection.
                 // detected SQLi using libinjection.
                 memset(&matches, '\0', sizeof(size_t)*2);
-                mcnt = find_pattern(l->modsecmsg, 0, 8, "Access ", 7, &matches, MATCH_FIRST);
+                mcnt = find_pattern(l->log_modsec_msg, 0, 8, "Access ", 7, &matches, MATCH_FIRST);
                 if (mcnt == 1 && matches[0] == 0) {
-                    l->modseclinetype = LOGMSG_ACCDENIED;
+                    l->log_entry_class = LOGMSG_ACCDENIED;
                     size_t startpos = matches[0]+matches[1];
                     memset(&matches, '\0', sizeof(size_t)*2);
-                    mcnt = find_pattern(l->modsecmsg, startpos, 50, "Matched", 7, &matches, MATCH_FIRST);
+                    mcnt = find_pattern(l->log_modsec_msg, startpos, 50, "Matched", 7, &matches, MATCH_FIRST);
                     if (mcnt == 1) {
-                        l->modsecdenymsg = mscl_stradd(l, l->modsecmsg, matches[0]-2); // -2: '. ' before the 'Matched'
                         parse_ngx_warning_message(l);
                     }
                 }
                 else {
-                    mcnt = find_pattern(l->modsecmsg, 0, 9, "Warning.", 8, &matches, MATCH_FIRST);
+                    mcnt = find_pattern(l->log_modsec_msg, 0, 9, "Warning.", 8, &matches, MATCH_FIRST);
                     if (mcnt == 1 && matches[0] == 0) {
-                        l->modseclinetype = LOGMSG_WARNING;
+                        l->log_entry_class = LOGMSG_WARNING;
                         parse_ngx_warning_message(l);
                     }
                 }

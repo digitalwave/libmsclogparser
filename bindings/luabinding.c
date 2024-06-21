@@ -53,7 +53,7 @@ modsecurity@digitalwave.hu
 
 #include "msclogparser.h"
 
-#define MODULE_VERSION "0.1.0"
+#define MODULE_VERSION "0.2.0"
 
 int msclualogparser_parse (lua_State *L) {
     int n = lua_gettop(L);
@@ -93,155 +93,151 @@ int msclualogparser_parse (lua_State *L) {
     lua_newtable(L);
     int maintable = lua_gettop(L);
 
-    lua_pushstring(L, "linelen");
-    lua_pushinteger(L, l.linelen);
+    lua_pushstring(L, "entry_is_modsecline");
+    lua_pushinteger(L, l.entry_is_modsecline);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "is_modsecline");
-    lua_pushinteger(L, l.is_modsecline);
+    lua_pushstring(L, "log_entry_raw_length");
+    lua_pushinteger(L, l.log_entry_raw_length);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "is_broken");
-    lua_pushinteger(L, l.is_broken);
+    lua_pushstring(L, "log_entry_raw_length");
+    lua_pushinteger(L, l.log_entry_raw_length);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "date_iso");
-    lua_pushstring(L, l.date_iso);
+    lua_pushstring(L, "log_date_iso");
+    lua_pushstring(L, l.log_date_iso);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "date_epoch");
-    lua_pushnumber(L, l.date_epoch);
+    lua_pushstring(L, "log_date_timestamp");
+    lua_pushnumber(L, l.log_date_timestamp);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "client");
-    lua_pushstring(L, l.client);
+    lua_pushstring(L, "log_client");
+    lua_pushstring(L, l.log_client);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modseclinetype");
-    lua_pushinteger(L, l.modseclinetype);
+    lua_pushstring(L, "log_entry_class");
+    lua_pushinteger(L, l.log_entry_class);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modsecmsg");
-    lua_pushstring(L, l.modsecmsg);
+    lua_pushstring(L, "log_modsec_msg");
+    lua_pushstring(L, l.log_modsec_msg);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modsecmsglen");
-    lua_pushinteger(L, l.modsecmsglen);
+    lua_pushstring(L, "log_modsec_msg_length");
+    lua_pushinteger(L, l.log_modsec_msg_length);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modsecdenymsg");
-    lua_pushstring(L, l.modsecdenymsg);
+    lua_pushstring(L, "log_modsec_reason");
+    lua_pushstring(L, l.log_modsec_reason);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modsecmsgreason");
-    lua_pushstring(L, l.modsecmsgreason);
+    lua_pushstring(L, "log_modsec_operator");
+    lua_pushstring(L, l.log_modsec_operator);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modsecmsgop");
-    lua_pushstring(L, l.modsecmsgop);
+    lua_pushstring(L, "log_modsec_operand");
+    lua_pushstring(L, l.log_modsec_operand);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modsecmsgoperand");
-    lua_pushstring(L, l.modsecmsgoperand);
+    lua_pushstring(L, "log_modsec_target_name");
+    lua_pushstring(L, l.log_modsec_target_name);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modsecmsgtrgname");
-    lua_pushstring(L, l.modsecmsgtrgname);
+    lua_pushstring(L, "log_modsec_target_value");
+    lua_pushstring(L, l.log_modsec_target_value);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "modsecmsgtrgvalue");
-    lua_pushstring(L, l.modsecmsgtrgvalue);
+    lua_pushstring(L, "log_modsec_process_error");
+    lua_pushstring(L, l.log_modsec_process_error);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "ruleerror");
-    lua_pushstring(L, l.ruleerror);
+    lua_pushstring(L, "log_rule_file");
+    lua_pushstring(L, l.log_rule_file);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "file");
-    lua_pushstring(L, l.file);
+    lua_pushstring(L, "log_rule_line");
+    lua_pushstring(L, l.log_rule_line);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "line");
-    lua_pushstring(L, l.line);
+    lua_pushstring(L, "log_rule_id");
+    lua_pushstring(L, l.log_rule_id);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "id");
-    lua_pushstring(L, l.id);
+    lua_pushstring(L, "log_rule_rev");
+    lua_pushstring(L, l.log_rule_rev);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "rev");
-    lua_pushstring(L, l.rev);
+    lua_pushstring(L, "log_rule_msg");
+    lua_pushstring(L, l.log_rule_msg);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "msg");
-    lua_pushstring(L, l.msg);
+    lua_pushstring(L, "log_rule_data");
+    lua_pushstring(L, l.log_rule_data);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "data");
-    lua_pushstring(L, l.data);
+    lua_pushstring(L, "log_rule_severity");
+    lua_pushstring(L, l.log_rule_severity);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "severity");
-    lua_pushstring(L, l.severity);
+    lua_pushstring(L, "log_rule_version");
+    lua_pushstring(L, l.log_rule_version);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "version");
-    lua_pushstring(L, l.version);
+    lua_pushstring(L, "log_rule_maturity");
+    lua_pushstring(L, l.log_rule_maturity);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "maturity");
-    lua_pushstring(L, l.maturity);
+    lua_pushstring(L, "log_rule_accuracy");
+    lua_pushstring(L, l.log_rule_accuracy);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "accuracy");
-    lua_pushstring(L, l.accuracy);
+    lua_pushstring(L, "log_rule_tags_cnt");
+    lua_pushinteger(L, l.log_rule_tags_cnt);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "tagcnt");
-    lua_pushinteger(L, l.tagcnt);
-    lua_settable(L, maintable);
-
-    lua_pushstring(L, "tags");
+    lua_pushstring(L, "log_rule_tags");
 
     lua_newtable(L);
     int subtable = lua_gettop(L);
     int ti = 0;
-    for(size_t ti = 0; ti < l.tagcnt; ti++) {
+    for(size_t ti = 0; ti < l.log_rule_tags_cnt; ti++) {
         lua_pushinteger(L, ti+1);
-        lua_pushstring(L, l.tags);
+        lua_pushstring(L, l.log_rule_tags);
         lua_settable(L, subtable);
-        l.tags += strlen(l.tags) + 1;
+        l.log_rule_tags += strlen(l.log_rule_tags) + 1;
     }
     lua_settable(L, maintable);
 
 
-    lua_pushstring(L, "hostname");
-    lua_pushstring(L, l.hostname);
+    lua_pushstring(L, "log_hostname");
+    lua_pushstring(L, l.log_hostname);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "uri");
-    lua_pushstring(L, l.uri);
+    lua_pushstring(L, "log_uri");
+    lua_pushstring(L, l.log_uri);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "unique_id");
-    lua_pushstring(L, l.unique_id);
-    lua_settable(L, maintable);
-
-
-    lua_pushstring(L, "lineerrcnt");
-    lua_pushinteger(L, l.lineerrcnt);
+    lua_pushstring(L, "log_unique_id");
+    lua_pushstring(L, l.log_unique_id);
     lua_settable(L, maintable);
 
 
-    lua_pushstring(L, "lineerrors");
+    lua_pushstring(L, "log_entry_errors_cnt");
+    lua_pushinteger(L, l.log_entry_errors_cnt);
+    lua_settable(L, maintable);
+
+
+    lua_pushstring(L, "log_entry_errors");
     lua_newtable(L);
     int errorstable = lua_gettop(L);
 
-    if (l.lineerrcnt > 0) {
+    if (l.log_entry_errors_cnt > 0) {
         // reset errpool ptr
         l.lineerrpool.currptr = l.lineerrpool.pool;
         msclogerr logerr;
-        for (int c=0; c < l.lineerrcnt; c++) {
+        for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
             lua_pushinteger(L, c+1);
             lua_pushstring(L, logerr.errmsg);
@@ -252,15 +248,15 @@ int msclualogparser_parse (lua_State *L) {
     lua_settable(L, maintable);
 
 
-    lua_pushstring(L, "lineerrorspos");
+    lua_pushstring(L, "log_entry_errors_pos");
     lua_newtable(L);
     int errorspostable = lua_gettop(L);
 
-    if (l.lineerrcnt > 0) {
+    if (l.log_entry_errors_cnt > 0) {
         // reset errpool ptr
         l.lineerrpool.currptr = l.lineerrpool.pool;
         msclogerr logerr;
-        for (int c=0; c < l.lineerrcnt; c++) {
+        for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
 
             lua_pushinteger(L, c+1);
