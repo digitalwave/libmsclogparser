@@ -829,7 +829,7 @@ At the end of the `configure` script run you will see the summary:
 Now you type `make` and `sudo make install`. This will build the library, and the modules for interpreters. Also will install the compiled modules to the destination directories.
 
 ## Naming convention
-To avoid the name collosion of modules in the `bindings/` directory, the compiled modules will have different names: `mscpylogparser.so` for Python, `msclualogparser.so` for Lua, `mscrubylogparser.so` for Ruby, and `mscphplogparser.so` for PHP.
+To avoid the name collison of modules in the `bindings/` directory, the compiled modules will have different names: `mscpylogparser.so` for Python, `msclualogparser.so` for Lua, `mscrubylogparser.so` for Ruby, and `mscphplogparser.so` for PHP.
 
 ## Using of module
 
