@@ -1,3 +1,13 @@
+v0.3.0 - 2026-01-XX
+-------------------
+
+  * Align fields to new format of Apache
+    * remove 2nd [client] field lookup
+    * add lookup for [remote] if [client] does not exist
+  * Align fields to ne format of Apache
+    * use [host] field for host if exists
+  * Modernize Python3 module build
+
 v0.2.0 - 2024-06-21
 -------------------
   * Get host from 'host' field in case of Nginx log

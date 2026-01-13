@@ -71,7 +71,7 @@
 #define PACKAGE_NAME "msclogparser"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "msclogparser 0.2.0"
+#define PACKAGE_STRING "msclogparser 0.3.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "msclogparser"
@@ -80,7 +80,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "0.2.0"
+#define PACKAGE_VERSION "0.3.0"
 
 /* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
@@ -88,7 +88,7 @@
 #define STDC_HEADERS 1
 
 /* Version number of package */
-#define VERSION "0.2.0"
+#define VERSION "0.3.0"
 
 /* Define as 'unsigned int' if <stddef.h> doesn't define. */
 /* #undef size_t */
