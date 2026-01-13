@@ -6,14 +6,19 @@ all-py: pybinding.c
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose)
 
-install-exec-py:
-	$(PYTHON) $(srcdir)/setup.py install \
-	--prefix $(DESTDIR)$(prefix) \
-	--verbose
+PYTHON_INSTALL_CMD = pip install --root=$(DESTDIR)/ \
+                --no-deps \
+                --ignore-installed \
+                --no-build-isolation .
+
+PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mypylogparser*
+
 
 clean-py:
 	rm -rf *.o *.so *.la build
 
+else
+PYTHON_INSTALL_CMD = @echo "Python support disabled, skipping..."
 endif
 
 
@@ -76,6 +81,7 @@ all-local:
 
 install-exec-local:
 	$(MAKE) $(BINDING_INSTALL_EXEC)
+	$(PYTHON_INSTALL_CMD)
 
 clean-local:
 	$(MAKE) $(BINDING_CLEAN)

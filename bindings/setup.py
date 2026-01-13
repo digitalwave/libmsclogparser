@@ -1,20 +1,15 @@
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
+import os
 
-def main():
-    setup(name="mscpylogparser",
-          version="0.2.0",
-          description="Python interface for parsing ModSecurity generated error.log lines",
-          author="Ervin Hegedus",
-          author_email="airween@digitalwave.hu",
-          ext_modules=[
-            Extension("mscpylogparser",
-                sources = ["pybinding.c"],
-                library_dirs = ["../src/.libs",],
-                libraries = ['msclogparser'],
-                extra_compile_args = ["-Wall", "-I../src"],
-            )
-          ],
-        )
+module = Extension(
+    'mscpylogparser',
+    sources=['pybinding.c'],
+    libraries=['msclogparser'],
+    include_dirs=['../src', '/usr/include', '/usr/local/include'],
+    library_dirs=['../src/.libs', '/usr/lib', '/usr/local/lib'],
+)
 
-if __name__ == "__main__":
-    main()
+setup(
+    ext_modules=[module],
+)
+

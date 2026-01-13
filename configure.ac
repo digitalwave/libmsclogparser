@@ -104,7 +104,6 @@ AS_IF([test "x$wantpythonbinding" = xtrue],
             ]
         )
         BINDING_ALL="${BINDING_ALL} all-py"
-        BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-py"
         BINDING_CLEAN="${BINDING_CLEAN} clean-py"
 	],
     [AC_MSG_RESULT([no])]

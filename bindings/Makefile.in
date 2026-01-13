@@ -289,6 +289,13 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+@ENABLE_PYTHON_FALSE@PYTHON_INSTALL_CMD = @echo "Python support disabled, skipping..."
+@ENABLE_PYTHON_TRUE@PYTHON_INSTALL_CMD = pip install --root=$(DESTDIR)/ \
+@ENABLE_PYTHON_TRUE@                --no-deps \
+@ENABLE_PYTHON_TRUE@                --ignore-installed \
+@ENABLE_PYTHON_TRUE@                --no-build-isolation .
+
+@ENABLE_PYTHON_TRUE@PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mypylogparser*
 @ENABLE_LUA_TRUE@LUALIBFLAG = -shared -fpic
 @ENABLE_LUA_TRUE@LUACFLAGS = -I../src $(LUA_INCLUDE) -L../src/.libs 
 @ENABLE_RUBY_TRUE@RUBYLIBFLAG = -shared -fPIC -L$(RUBY_ARCHLIBDIR)
@@ -494,11 +501,6 @@ uninstall-am:
 @ENABLE_PYTHON_TRUE@	--build-base $(shell readlink -f $(builddir))/build \
 @ENABLE_PYTHON_TRUE@	--verbose)
 
-@ENABLE_PYTHON_TRUE@install-exec-py:
-@ENABLE_PYTHON_TRUE@	$(PYTHON) $(srcdir)/setup.py install \
-@ENABLE_PYTHON_TRUE@	--prefix $(DESTDIR)$(prefix) \
-@ENABLE_PYTHON_TRUE@	--verbose
-
 @ENABLE_PYTHON_TRUE@clean-py:
 @ENABLE_PYTHON_TRUE@	rm -rf *.o *.so *.la build
 
@@ -542,6 +544,7 @@ all-local:
 
 install-exec-local:
 	$(MAKE) $(BINDING_INSTALL_EXEC)
+	$(PYTHON_INSTALL_CMD)
 
 clean-local:
 	$(MAKE) $(BINDING_CLEAN)

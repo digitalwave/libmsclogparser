@@ -2921,7 +2921,7 @@ ac_config_headers="$ac_config_headers config.h"
 
 
 
-VER_NUMBER=0:2:0
+VER_NUMBER=0:3:0
 
 
 ac_ext=c
@@ -14820,7 +14820,6 @@ printf "%s\n" "#define HAVE_PYTHON 1" >>confdefs.h
 
 fi
         BINDING_ALL="${BINDING_ALL} all-py"
-        BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-py"
         BINDING_CLEAN="${BINDING_CLEAN} clean-py"
 
 else case e in #(

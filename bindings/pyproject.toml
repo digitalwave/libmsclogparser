@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mscpylogparser"
+version = "0.3.0"
+description = "Python bindings for libmsclogparser"
+readme = "README.md"
+authors = [{name = "Ervin Hegedüs", email = "airween@digitalwave.hu"}]
+dependencies = []
+
+[tool.setuptools]
+py-modules = []
