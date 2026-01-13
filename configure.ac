@@ -39,6 +39,7 @@ AC_CONFIG_FILES([\
     src/Makefile \
     examples/Makefile \
     bindings/Makefile \
+    msclogparser.pc \
     ])
 
 LT_INIT

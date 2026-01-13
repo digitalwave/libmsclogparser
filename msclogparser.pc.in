@@ -1,0 +1,11 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=/usr/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+
+Name: msclogparser
+Description: C library for parsing ModSecurity logs
+Version: 0.3.0
+Libs: -L${libdir} -lmsclogparser
+Cflags: -I${includedir}
+
