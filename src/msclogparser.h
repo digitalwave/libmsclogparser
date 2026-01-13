@@ -1,7 +1,7 @@
 /*
 This file is part of the libmsclogparser project.
 
-Copyright (c) 2023 Digitalwave
+Copyright (c) 2023-2026 Digitalwave
 
 Authors: Ervin Hegedüs <airween@digitalwave.hu>
 
@@ -50,7 +50,7 @@ modsecurity@digitalwave.hu
 #define MSCLOGPARSER_H
 
 #define MSCLOGPARSER_MAJOR "0"
-#define MSCLOGPARSER_MINOR "2"
+#define MSCLOGPARSER_MINOR "3"
 #define MSCLOGPARSER_PATCH "0"
 #define MSCLOGPARSER_VERSION MSCLOGPARSER_MAJOR"."MSCLOGPARSER_MINOR"."MSCLOGPARSER_PATCH
 

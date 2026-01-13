@@ -1,7 +1,7 @@
 /*
 This file is part of the libmsclogparser project.
 
-Copyright (c) 2023 Digitalwave
+Copyright (c) 2023-2026 Digitalwave
 
 Authors: Ervin Hegedüs <airween@digitalwave.hu>
 
@@ -53,7 +53,7 @@ modsecurity@digitalwave.hu
 
 #include "msclogparser.h"
 
-#define MODULE_VERSION "0.2.0"
+#define MODULE_VERSION "0.3.0"
 
 int msclualogparser_parse (lua_State *L) {
     int n = lua_gettop(L);
@@ -241,7 +241,7 @@ int msclualogparser_parse (lua_State *L) {
             read_msclog_err(&l.lineerrpool, &logerr);
             lua_pushinteger(L, c+1);
             lua_pushstring(L, logerr.errmsg);
-            lua_settable(L, errorstable);            
+            lua_settable(L, errorstable);
         }
     }
 
@@ -326,6 +326,6 @@ int luaopen_msclualogparser(lua_State *L) {
     lua_pushstring(L, "MODULE_VERSION");
     lua_pushstring(L, MODULE_VERSION);
     lua_settable(L, -3);
- 
+
     return 1;
 }

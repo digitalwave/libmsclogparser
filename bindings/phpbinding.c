@@ -1,7 +1,7 @@
 /*
 This file is part of the libmsclogparser project.
 
-Copyright (c) 2023 Digitalwave
+Copyright (c) 2023-2025 Digitalwave
 
 Authors: Ervin Hegedüs <airween@digitalwave.hu>
 
@@ -53,12 +53,12 @@ modsecurity@digitalwave.hu
 
 #include "msclogparser.h"
 
-#define MODULE_VERSION "0.2.0"
+#define MODULE_VERSION "0.3.0"
 
 extern zend_module_entry mscphplogparser_module_entry;
 # define phpext_mscphplogparser_ptr &mscphplogparser_module_entry
 
-# define PHP_MSCPHPLOGPARSER_VERSION "0.2"
+# define PHP_MSCPHPLOGPARSER_VERSION "0.3"
 
 
 PHP_MINIT_FUNCTION(mscphplogparser);
