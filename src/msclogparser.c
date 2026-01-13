@@ -1,7 +1,7 @@
 /*
 This file is part of the libmsclogparser project.
 
-Copyright (c) 2023 Digitalwave
+Copyright (c) 2023-2026 Digitalwave
 
 Authors: Ervin Hegedüs <airween@digitalwave.hu>
 
@@ -570,16 +570,11 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             set_error(l, "[hostname] field is truncated!", *startpos, l->log_entry_raw_length);
             return;
         }
-        // 'hostname' is relevant only if type of log is Apache
-        // Nginx [hostname ""] contains the IP address, therefore we
-        // have to process that later - see end of this function
-        if (linetype == LOG_TYPE_APACHE) {
-            tbuff[t] = '\0';
-            l->log_hostname = mscl_stradd(l, tbuff, t);
-            *startpos = k;
-            if (tailstart != NULL) {
-                *tailstart = matches[0];
-            }
+        tbuff[t] = '\0';
+        l->log_hostname = mscl_stradd(l, tbuff, t);
+        *startpos = k;
+        if (tailstart != NULL) {
+            *tailstart = matches[0];
         }
     }
     else {
@@ -639,7 +634,8 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
 
     // Nginx [hostname ""] filed contains the server IP address, we have to process
     // the last 'host: "..."' field
-    if (linetype == LOG_TYPE_NGINX) {
+    // enter this block only if hostname is empty, eg. log is chunked
+    if (linetype == LOG_TYPE_NGINX && strlen(l->log_hostname) == 0) {
         memset(&matches, '\0', sizeof(size_t)*2);
         mcnt = find_pattern(line, hostlast, l->log_entry_raw_length, "host: \"", 7, &matches, MATCH_FIRST);
         if (mcnt > 0) {
@@ -1042,15 +1038,15 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
     l->log_unique_id              = mscl_stradd(l, "", 0);
 
     if (t == LOG_TYPE_APACHE) {
-        // [Thu Sep 22 14:51:12.636955 2022] [:error] [pid 19765:tid 139903325140736] [client 165.232.134.42:52179] [client 165.232.134.42] 
-        // [Thu Sep 22 14:51:12.636955 2022] [:info] [pid 1:tid 1] [client 1.2.3.4:1] [client 1.2.3.4] 
+        // [Thu Sep 22 14:51:12.636955 2022] [security2:error] [pid 19765:tid 139903325140736] [client 165.232.134.42:52179]
+        // [Thu Sep 22 14:51:12.636955 2022] [security2:info] [pid 1:tid 1] [client 1.2.3.4:1]
         //          |         |         |         |         |         |         |         |         |         |         |         |         |
         offset = 90;
     }
     else if (t == LOG_TYPE_NGINX) {
         // 2022/12/20 17:04:13 [info] 59513#59513: *1
         // 2022/12/20 17:04:13 [info] 1#1: *1
-        //          |         |         |         |  
+        //          |         |         |         |
         offset = 30;
     }
 
@@ -1082,38 +1078,32 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
         if (t == LOG_TYPE_APACHE) {
 
             // catch the [client ...] fields
-            // first possible occurrance position of first [client ...] is 55
+            // first possible occurrance position of first [client ...] is 65
             // only in case of Apache
 
             // catch the [client ...] fields
             memset(matches, '\0', sizeof(size_t)*2);
-            // first possible occurrance position of first [client ...] is 55
+            // first possible occurrance position of first [client ...] is 65
             // only in case of Apache
-            mcnt = find_pattern(line, 55, len, "[client ", 8, &matches, MATCH_FIRST);
+            mcnt = find_pattern(line, 65, len, "[client ", 8, &matches, MATCH_FIRST);
             if (mcnt != 1) {
-                set_error(l, "Can't find [client] field!", 0, len);
-                return 1;
-            }
-            else {
-                size_t pos = matches[0] + matches[1];
-                memset(matches, '\0', sizeof(size_t)*2);
-                // find the second [client] position, this shows the end of real [client]
-                mcnt = find_pattern(line, pos, len, "[client ", 8, &matches, MATCH_FIRST);
+                mcnt = find_pattern(line, 65, len, "[remote ", 8, &matches, MATCH_FIRST);
                 if (mcnt != 1) {
-                    set_error(l, "Can't find second [client] field!", 0, len);
+                    set_error(l, "Can't find [client] or [remote] field!", 0, len);
                     return 1;
                 }
-                else {
-                    int ci = 0;
-                    int k = pos;
-                    char client[50];
-                    while(k < matches[0]-1 && line[k] != ']') {
-                        client[ci++] = line[k++];
-                    }
-                    client[ci] = '\0';
-                    l->log_client = mscl_stradd(l, client, ci);
-                }
             }
+            size_t pos = matches[0] + matches[1];
+            memset(matches, '\0', sizeof(size_t)*2);
+
+            int ci = 0;
+            int k = pos;
+            char client[50];
+            while(k < matches[0]-1 && line[k] != ']') {
+                client[ci++] = line[k++];
+            }
+            client[ci] = '\0';
+            l->log_client = mscl_stradd(l, client, ci);
 
             //ap_log_msg_type log_msg_type;
             memset(matches, '\0', sizeof(size_t)*2);
