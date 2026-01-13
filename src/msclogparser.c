@@ -166,7 +166,7 @@ static int parse_date_apache(char * line, logdata *l) {
     strptime(datetime, "%A %b %0d %H:%M:%S %Y", &tm);
 
     char date[20] = {0};
-    sprintf(date, "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", &tm);
     l->log_date_iso = mscl_stradd(l, date, 19);
     float mili = strtof(millisec, NULL);
     l->log_date_timestamp = mktime(&tm);
@@ -190,7 +190,7 @@ static int parse_date_nginx(char * line, logdata *l) {
     strptime(datetime, "%Y/%m/%d %H:%M:%S", &tm);
 
     char date[20] = {0};
-    sprintf(date, "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", &tm);
     l->log_date_iso = mscl_stradd(l, date, 19);
     l->log_date_timestamp = mktime(&tm);
 
