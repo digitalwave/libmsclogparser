@@ -5,34 +5,34 @@
 #define HAVE_DLFCN_H 1
 
 /* Define to 1 if you have the <ext/standard/info.h> header file. */
-#define HAVE_EXT_STANDARD_INFO_H 1
+/* #undef HAVE_EXT_STANDARD_INFO_H */
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
 /* Define to 1 if you have the <lauxlib.h> header file. */
-#define HAVE_LAUXLIB_H 1
+/* #undef HAVE_LAUXLIB_H */
 
 /* Define to 1 if you have the <luaconf.h> header file. */
-#define HAVE_LUACONF_H 1
+/* #undef HAVE_LUACONF_H */
 
 /* Define to 1 if you have the <lualib.h> header file. */
-#define HAVE_LUALIB_H 1
+/* #undef HAVE_LUALIB_H */
 
 /* Define to 1 if you have the <lua.h> header file. */
-#define HAVE_LUA_H 1
+/* #undef HAVE_LUA_H */
 
 /* Define to 1 if you have the <php.h> header file. */
-#define HAVE_PHP_H 1
+/* #undef HAVE_PHP_H */
 
 /* Define to 1 if you have the Python3 libraries. */
 #define HAVE_PYTHON 1
 
 /* Define to 1 if you have the <ruby/config.h> header file. */
-#define HAVE_RUBY_CONFIG_H 1
+/* #undef HAVE_RUBY_CONFIG_H */
 
 /* Define to 1 if you have the <ruby.h> header file. */
-#define HAVE_RUBY_H 1
+/* #undef HAVE_RUBY_H */
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
@@ -82,7 +82,7 @@
 /* Define to the version of this package. */
 #define PACKAGE_VERSION "0.2.0"
 
-/* Define to 1 if all of the C90 standard headers exist (not just the ones
+/* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
@@ -90,8 +90,8 @@
 /* Version number of package */
 #define VERSION "0.2.0"
 
-/* Define to `unsigned int' if <sys/types.h> does not define. */
+/* Define as 'unsigned int' if <stddef.h> doesn't define. */
 /* #undef size_t */
 
-/* Define to `int' if <sys/types.h> does not define. */
+/* Define as 'int' if <sys/types.h> doesn't define. */
 /* #undef ssize_t */
