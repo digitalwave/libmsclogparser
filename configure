@@ -5393,7 +5393,7 @@ fi
 
 # AX_VALGRIND_CHECK
 
-ac_config_files="$ac_config_files Makefile src/Makefile examples/Makefile bindings/Makefile"
+ac_config_files="$ac_config_files Makefile src/Makefile examples/Makefile bindings/Makefile msclogparser.pc"
 
 
 case `pwd` in
@@ -17109,6 +17109,7 @@ do
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "examples/Makefile") CONFIG_FILES="$CONFIG_FILES examples/Makefile" ;;
     "bindings/Makefile") CONFIG_FILES="$CONFIG_FILES bindings/Makefile" ;;
+    "msclogparser.pc") CONFIG_FILES="$CONFIG_FILES msclogparser.pc" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
 
   *) as_fn_error $? "invalid argument: '$ac_config_target'" "$LINENO" 5;;
