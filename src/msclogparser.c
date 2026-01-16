@@ -1099,7 +1099,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
             int ci = 0;
             int k = pos;
             char client[50];
-            while(k < matches[0]-1 && line[k] != ']') {
+            while(k < matches[0]-1 && k < len && line[k] != ']') {
                 client[ci++] = line[k++];
             }
             client[ci] = '\0';
@@ -1148,7 +1148,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                         if (hostpos > 0) {
                             int k = toffset+1;
                             int i = 0;
-                            while(k < hostpos-1) {
+                            while(k < hostpos-1 && k < len) {
                                 tbuff[i++] = line[k++];
                             }
                             tbuff[i] = '\0';
@@ -1165,7 +1165,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                             if (hostpos > 0) {
                                 int k = toffset+1;
                                 int i = 0;
-                                while(k < hostpos-1) {
+                                while(k < hostpos-1 && k < len) {
                                     tbuff[i++] = line[k++];
                                 }
                                 tbuff[i] = '\0';
@@ -1185,7 +1185,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                 int ci = 0;
                 int k = matches[0] + matches[1];
                 char client[50];
-                while(line[k] != ',') {
+                while(k < len && line[k] != ',') {
                     client[ci++] = line[k++];
                 }
                 client[ci] = '\0';
