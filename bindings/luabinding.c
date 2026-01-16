@@ -265,11 +265,11 @@ int msclualogparser_parse (lua_State *L) {
             subtable = lua_gettop(L);
 
             lua_pushinteger(L, 1);
-            lua_pushinteger(L, *logerr.startpos);
+            lua_pushinteger(L, logerr.startpos);
             lua_settable(L, subtable);
 
             lua_pushinteger(L, 2);
-            lua_pushinteger(L, *logerr.endpos);
+            lua_pushinteger(L, logerr.endpos);
             lua_settable(L, subtable);
 
             lua_settable(L, errorspostable);

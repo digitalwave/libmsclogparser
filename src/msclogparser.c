@@ -72,10 +72,10 @@ void read_msclog_err(msclogpool *pool, msclogerr *err) {
     err->errmsg = pool->currptr;
     pool->currptr += strlen(err->errmsg) + 1;
 
-    err->startpos = (size_t *)pool->currptr;
+    memcpy(&err->startpos, pool->currptr, sizeof(size_t));
     pool->currptr += sizeof(size_t);
 
-    err->endpos = (size_t *)pool->currptr;
+    memcpy(&err->endpos, pool->currptr, sizeof(size_t));
     pool->currptr += sizeof(size_t);
 
     return;

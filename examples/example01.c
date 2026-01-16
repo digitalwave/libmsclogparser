@@ -60,8 +60,9 @@ int main(int argc, char ** argv) {
                         l.lineerrpool.currptr = l.lineerrpool.pool;
                         for (int c=0; c < l.log_entry_errors_cnt; c++) {
                             msclogerr err;
+                            memset(&err, 0, sizeof(err));
                             read_msclog_err(&l.lineerrpool, &err);
-                            printf("%s - %zu:%zu\n", err.errmsg, *err.startpos, *err.endpos);
+                            printf("%s - %zu:%zu\n", err.errmsg, err.startpos, err.endpos);
                         }
                     }
                     printf("%s", line);

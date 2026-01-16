@@ -114,7 +114,7 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
         for(int c = 0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
             rb_ary_push(errors, rb_str_new2(logerr.errmsg));
-            rb_ary_push(errorspos, rb_ary_new3(2, INT2NUM(*logerr.startpos), INT2NUM(*logerr.endpos)));
+            rb_ary_push(errorspos, rb_ary_new3(2, INT2NUM(logerr.startpos), INT2NUM(logerr.endpos)));
         }
     }
     rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors")), errors);

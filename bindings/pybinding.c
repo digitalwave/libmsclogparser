@@ -89,7 +89,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
             PyList_Append(errors, Py_BuildValue("s", logerr.errmsg));
-            PyList_Append(errorspos, Py_BuildValue("[k,k]", *logerr.startpos, *logerr.endpos));
+            PyList_Append(errorspos, Py_BuildValue("[i,i]", logerr.startpos, logerr.endpos));
         }
     }
 

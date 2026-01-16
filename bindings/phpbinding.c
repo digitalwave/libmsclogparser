@@ -160,8 +160,8 @@ PHP_FUNCTION(parse)
             add_next_index_string(&errors, logerr.errmsg);
             zval pairs;
             array_init(&pairs);
-            add_next_index_long(&pairs, *logerr.startpos);
-            add_next_index_long(&pairs, *logerr.endpos);
+            add_next_index_long(&pairs, logerr.startpos);
+            add_next_index_long(&pairs, logerr.endpos);
             add_next_index_zval(&errorspos, &pairs);
         }
     }

@@ -79,8 +79,8 @@ typedef struct msclogpool {
 
 typedef struct msclogerr {
     char    *errmsg;
-    size_t  *startpos;
-    size_t  *endpos;
+    size_t  startpos;
+    size_t  endpos;
 } msclogerr;
 
 typedef struct logdata {
