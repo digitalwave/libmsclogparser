@@ -11,6 +11,7 @@ Makefile
 *.lo
 *.o
 *.so
+*.pc
 stamp-h1
 autom4te.cache/*
 bindings/build/
