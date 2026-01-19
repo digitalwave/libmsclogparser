@@ -641,7 +641,7 @@ if (l.lineerrcnt > 0) {
         msclogerr err;                              // structure above
 
         read_msclog_err(&l.lineerrpool, &err);      // call the fn and fill it
-        printf("%s - %zu:%zu\n", err.errmsg, *err.startpos, *err.endpos);
+        printf("%s - %zu:%zu\n", err.errmsg, err.startpos, err.endpos);
     }
 }
 ```
