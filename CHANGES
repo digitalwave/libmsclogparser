@@ -1,4 +1,4 @@
-v0.3.0 - 2026-01-XX
+v0.3.0 - 2026-01-19
 -------------------
 
   * Align fields to new format of Apache
@@ -7,6 +7,10 @@ v0.3.0 - 2026-01-XX
   * Align fields to ne format of Apache
     * use [host] field for host if exists
   * Modernize Python3 module build
+  * Add pkgconfig related files and entries
+  * Replace pointer type to static in method
+    of error storage
+  * Add boundary check in parsing of log tail
 
 v0.2.0 - 2024-06-21
 -------------------
