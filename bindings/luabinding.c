@@ -51,11 +51,11 @@ modsecurity@digitalwave.hu
 
 #include <string.h>
 
-#include "msclogparser.h"
+#include "../src/msclogparser.h"
 
-#define MODULE_VERSION "0.3.0"
+#define MODULE_VERSION "1.0.0"
 
-int msclualogparser_parse (lua_State *L) {
+static int msclualogparser_parse (lua_State *L) {
     int n = lua_gettop(L);
 
     if (n != 3) {
@@ -201,7 +201,6 @@ int msclualogparser_parse (lua_State *L) {
 
     lua_newtable(L);
     int subtable = lua_gettop(L);
-    int ti = 0;
     for(size_t ti = 0; ti < l.log_rule_tags_cnt; ti++) {
         lua_pushinteger(L, ti+1);
         lua_pushstring(L, l.log_rule_tags);
@@ -241,7 +240,7 @@ int msclualogparser_parse (lua_State *L) {
             read_msclog_err(&l.lineerrpool, &logerr);
             lua_pushinteger(L, c+1);
             lua_pushstring(L, logerr.errmsg);
-            lua_settable(L, errorstable);
+            lua_settable(L, errorstable);            
         }
     }
 
@@ -265,11 +264,11 @@ int msclualogparser_parse (lua_State *L) {
             subtable = lua_gettop(L);
 
             lua_pushinteger(L, 1);
-            lua_pushinteger(L, logerr.startpos);
+            lua_pushinteger(L, *logerr.startpos);
             lua_settable(L, subtable);
 
             lua_pushinteger(L, 2);
-            lua_pushinteger(L, logerr.endpos);
+            lua_pushinteger(L, *logerr.endpos);
             lua_settable(L, subtable);
 
             lua_settable(L, errorspostable);
@@ -326,6 +325,6 @@ int luaopen_msclualogparser(lua_State *L) {
     lua_pushstring(L, "MODULE_VERSION");
     lua_pushstring(L, MODULE_VERSION);
     lua_settable(L, -3);
-
+ 
     return 1;
 }

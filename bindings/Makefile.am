@@ -60,9 +60,6 @@ if ENABLE_PHP
 
 all-php: phpbinding.c
 
-    #$(CC) -I. -DPHP_ATOM_INC -I/usr/include/php/20190902 -I/usr/include/php/20190902/main -I/usr/include/php/20190902/TSRM -I/usr/include/php/20190902/Zend -I/usr/include/php/20190902/ext -I/usr/include/php/20190902/ext/date/lib -DHAVE_CONFIG_H -g -O2 -c phpbinding.c -fPIC -DPIC -o phpbinding.o
-    #$(CC) -shared -fPIC -DPIC phpbinding.o -g -O2 -Wl,-soname -Wl,mscphplogparser.so -o mscphplogparser.so
-
 	$(CC) -I. -I../src/ -L../src/.libs -DPHP_ATOM_INC $(PHP_INCLUDE_PATH) -DHAVE_CONFIG_H -c phpbinding.c -fPIC -DPIC -o phpbinding.o -lmsclogparser
 	$(CC) -L../src/.libs -shared -fPIC -DPIC phpbinding.o -Wl,-soname -Wl,mscphplogparser.so -o mscphplogparser.so -lmsclogparser
 

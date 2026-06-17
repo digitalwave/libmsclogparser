@@ -49,13 +49,15 @@ modsecurity@digitalwave.hu
 #ifndef MSCLOGPARSER_H
 #define MSCLOGPARSER_H
 
-#define MSCLOGPARSER_MAJOR "0"
-#define MSCLOGPARSER_MINOR "3"
+#define MSCLOGPARSER_MAJOR "1"
+#define MSCLOGPARSER_MINOR "0"
 #define MSCLOGPARSER_PATCH "0"
 #define MSCLOGPARSER_VERSION MSCLOGPARSER_MAJOR"."MSCLOGPARSER_MINOR"."MSCLOGPARSER_PATCH
 
 #define LOGTYPE_APACHE 1
 #define LOGTYPE_NGINX  2
+
+#include <stddef.h>
 
 typedef enum loglinetype {
     LOG_TYPE_APACHE,
@@ -79,45 +81,77 @@ typedef struct msclogpool {
 
 typedef struct msclogerr {
     char    *errmsg;
-    size_t  startpos;
-    size_t  endpos;
+    size_t  *startpos;
+    size_t  *endpos;
 } msclogerr;
 
+typedef enum logfields {
+    LOGFIELD_LOG_DATE_ISO,
+    LOGFIELD_LOG_DATE_TIMESTAMP,
+    LOGFIELD_LOG_CLIENT,
+    LOGFIELD_LOG_MODSEC_MSG,
+    LOGFIELD_LOG_MODSEC_REASON,
+    LOGFIELD_LOG_MODSEC_OPERATOR,
+    LOGFIELD_LOG_MODSEC_OPERAND,
+    LOGFIELD_LOG_MODSEC_TARGET_NAME,
+    LOGFIELD_LOG_MODSEC_TARGET_VALUE,
+    LOGFIELD_LOG_MODSEC_PROCESS_ERROR,
+    LOGFIELD_LOG_RULE_FILE,
+    LOGFIELD_LOG_RULE_LINE,
+    LOGFIELD_LOG_RULE_ID,
+    LOGFIELD_LOG_RULE_REV,
+    LOGFIELD_LOG_RULE_MSG,
+    LOGFIELD_LOG_RULE_DATA,
+    LOGFIELD_LOG_RULE_SEVERITY,
+    LOGFIELD_LOG_RULE_VERSION,
+    LOGFIELD_LOG_RULE_MATURITY,
+    LOGFIELD_LOG_RULE_ACCURACY,
+    LOGFIELD_LOG_RULE_TAGS,
+    LOGFIELD_LOG_HOSTNAME,
+    LOGFIELD_LOG_URI,
+    LOGFIELD_LOG_UNIQUE_ID
+} logfields;
+
+
 typedef struct logdata {
-    msclogpool      datapool;
     int             entry_is_modsecline;
     int             entry_is_broken;
     size_t          log_entry_raw_length;
-    char            *log_date_iso;
     double          log_date_timestamp;
-    char            *log_client;
     logmsgtype      log_entry_class;
-    char            *log_modsec_msg;
     size_t          log_modsec_msg_length;
-    char            *log_modsec_reason;
-    char            *log_modsec_operator;
-    char            *log_modsec_operand;
-    char            *log_modsec_target_name;
-    char            *log_modsec_target_value;
-    char            *log_modsec_process_error;
-    char            *log_rule_file;
-    char            *log_rule_line;
-    char            *log_rule_id;
-    char            *log_rule_rev;
-    char            *log_rule_msg;
-    char            *log_rule_data;
-    char            *log_rule_severity;
-    char            *log_rule_version;
-    char            *log_rule_maturity;
-    char            *log_rule_accuracy;
     size_t          log_rule_tags_cnt;
-    char            *log_rule_tags;
-    char            *log_hostname;
-    char            *log_uri;
-    char            *log_unique_id;
-    msclogpool      lineerrpool;
     int             log_entry_errors_cnt;
+    char          * fields[LOGFIELD_LOG_UNIQUE_ID+1];
+    msclogpool      datapool;
+    msclogpool      lineerrpool;
 } logdata;
+
+#define log_date_iso               fields[LOGFIELD_LOG_DATE_ISO]
+#define log_client                 fields[LOGFIELD_LOG_CLIENT]
+#define log_modsec_msg             fields[LOGFIELD_LOG_MODSEC_MSG]
+#define log_modsec_reason          fields[LOGFIELD_LOG_MODSEC_REASON]
+#define log_modsec_operator        fields[LOGFIELD_LOG_MODSEC_OPERATOR]
+#define log_modsec_operand         fields[LOGFIELD_LOG_MODSEC_OPERAND]
+#define log_modsec_target_name     fields[LOGFIELD_LOG_MODSEC_TARGET_NAME]
+#define log_modsec_target_value    fields[LOGFIELD_LOG_MODSEC_TARGET_VALUE]
+#define log_modsec_process_error   fields[LOGFIELD_LOG_MODSEC_PROCESS_ERROR]
+#define log_rule_file              fields[LOGFIELD_LOG_RULE_FILE]
+#define log_rule_line              fields[LOGFIELD_LOG_RULE_LINE]
+#define log_rule_id                fields[LOGFIELD_LOG_RULE_ID]
+#define log_rule_rev               fields[LOGFIELD_LOG_RULE_REV]
+#define log_rule_msg               fields[LOGFIELD_LOG_RULE_MSG]
+#define log_rule_data              fields[LOGFIELD_LOG_RULE_DATA]
+#define log_rule_severity          fields[LOGFIELD_LOG_RULE_SEVERITY]
+#define log_rule_version           fields[LOGFIELD_LOG_RULE_VERSION]
+#define log_rule_maturity          fields[LOGFIELD_LOG_RULE_MATURITY]
+#define log_rule_accuracy          fields[LOGFIELD_LOG_RULE_ACCURACY]
+#define log_rule_tags              fields[LOGFIELD_LOG_RULE_TAGS]
+#define log_hostname               fields[LOGFIELD_LOG_HOSTNAME]
+#define log_uri                    fields[LOGFIELD_LOG_URI]
+#define log_unique_id              fields[LOGFIELD_LOG_UNIQUE_ID]
+
+typedef char * logvalptr;
 
 void read_msclog_err(msclogpool *pool, msclogerr *err);
 int parse (char * line, size_t len, loglinetype t, logdata * l);

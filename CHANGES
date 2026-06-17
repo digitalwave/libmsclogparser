@@ -1,6 +1,11 @@
+v1.0.0 - 2026-06-17
+-------------------
+  * The C structure of the structure library has been
+    reorganized, most fields are now accessible via indexed arrays.
+  * Some code cleanups
+
 v0.3.0 - 2026-01-19
 -------------------
-
   * Align fields to new format of Apache
     * remove 2nd [client] field lookup
     * add lookup for [remote] if [client] does not exist

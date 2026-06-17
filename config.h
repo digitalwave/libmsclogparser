@@ -5,34 +5,34 @@
 #define HAVE_DLFCN_H 1
 
 /* Define to 1 if you have the <ext/standard/info.h> header file. */
-/* #undef HAVE_EXT_STANDARD_INFO_H */
+#define HAVE_EXT_STANDARD_INFO_H 1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
 /* Define to 1 if you have the <lauxlib.h> header file. */
-/* #undef HAVE_LAUXLIB_H */
+#define HAVE_LAUXLIB_H 1
 
 /* Define to 1 if you have the <luaconf.h> header file. */
-/* #undef HAVE_LUACONF_H */
+#define HAVE_LUACONF_H 1
 
 /* Define to 1 if you have the <lualib.h> header file. */
-/* #undef HAVE_LUALIB_H */
+#define HAVE_LUALIB_H 1
 
 /* Define to 1 if you have the <lua.h> header file. */
-/* #undef HAVE_LUA_H */
+#define HAVE_LUA_H 1
 
 /* Define to 1 if you have the <php.h> header file. */
-/* #undef HAVE_PHP_H */
+#define HAVE_PHP_H 1
 
 /* Define to 1 if you have the Python3 libraries. */
 #define HAVE_PYTHON 1
 
 /* Define to 1 if you have the <ruby/config.h> header file. */
-/* #undef HAVE_RUBY_CONFIG_H */
+#define HAVE_RUBY_CONFIG_H 1
 
 /* Define to 1 if you have the <ruby.h> header file. */
-/* #undef HAVE_RUBY_H */
+#define HAVE_RUBY_H 1
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
@@ -71,7 +71,7 @@
 #define PACKAGE_NAME "msclogparser"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "msclogparser 0.3.0"
+#define PACKAGE_STRING "msclogparser 1.0.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "msclogparser"
@@ -80,7 +80,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "0.3.0"
+#define PACKAGE_VERSION "1.0.0"
 
 /* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
@@ -88,7 +88,7 @@
 #define STDC_HEADERS 1
 
 /* Version number of package */
-#define VERSION "0.3.0"
+#define VERSION "1.0.0"
 
 /* Define as 'unsigned int' if <stddef.h> doesn't define. */
 /* #undef size_t */

@@ -42,10 +42,9 @@ int main(int argc, char ** argv) {
     }
 
     char line[4096] = {0};
-    size_t len      = 0;
     size_t li       = 0;
     while (fgets (line, 4095, fp) != NULL) {
-        len = strlen(line);
+        size_t len = strlen(line);
         if (len > 0) {
             printf("Nr: %zu\n", li++);
             memset(&l, '\0', sizeof(logdata));
@@ -60,9 +59,8 @@ int main(int argc, char ** argv) {
                         l.lineerrpool.currptr = l.lineerrpool.pool;
                         for (int c=0; c < l.log_entry_errors_cnt; c++) {
                             msclogerr err;
-                            memset(&err, 0, sizeof(err));
                             read_msclog_err(&l.lineerrpool, &err);
-                            printf("%s - %zu:%zu\n", err.errmsg, err.startpos, err.endpos);
+                            printf("%s - %zu:%zu\n", err.errmsg, *err.startpos, *err.endpos);
                         }
                     }
                     printf("%s", line);

@@ -72,16 +72,16 @@ void read_msclog_err(msclogpool *pool, msclogerr *err) {
     err->errmsg = pool->currptr;
     pool->currptr += strlen(err->errmsg) + 1;
 
-    memcpy(&err->startpos, pool->currptr, sizeof(size_t));
+    err->startpos = (size_t *)pool->currptr;
     pool->currptr += sizeof(size_t);
 
-    memcpy(&err->endpos, pool->currptr, sizeof(size_t));
+    err->endpos = (size_t *)pool->currptr;
     pool->currptr += sizeof(size_t);
 
     return;
 }
 
-static char * mscl_stradd(logdata *l, char *src, size_t srclen) {
+static char * mscl_stradd(logdata *l, const char *src, size_t srclen) {
     char * ptr = l->datapool.currptr;
     memcpy(l->datapool.currptr, src, srclen);
     l->datapool.offset += srclen + 1;
@@ -91,7 +91,7 @@ static char * mscl_stradd(logdata *l, char *src, size_t srclen) {
     return ptr;
 }
 
-static void set_error(logdata *l, char *errmsg, size_t pos0, size_t pos1) {
+static void set_error(logdata *l, const char *errmsg, size_t pos0, size_t pos1) {
     l->entry_is_broken = 1;
     size_t len = strlen(errmsg);
 
@@ -112,7 +112,7 @@ static void set_error(logdata *l, char *errmsg, size_t pos0, size_t pos1) {
     return;
 }
 
-static void copy_str_from_line(logdata *l, char *line, char **dest, size_t pos, size_t end, size_t maxlen, size_t (*errpos)[2], int * is_broken) {
+static void copy_str_from_line(logdata *l, const char *line, char **dest, size_t pos, size_t end, size_t maxlen, size_t (*errpos)[2], int * is_broken) {
 
     size_t t = 0;
     size_t tpos = pos;
@@ -144,7 +144,7 @@ static void copy_str_from_line(logdata *l, char *line, char **dest, size_t pos, 
     return;
 }
 
-static int parse_date_apache(char * line, logdata *l) {
+static int parse_date_apache(const char * line, logdata *l) {
 
     // check if the date and time field boundaries are right
     // [Thu Sep 22 14:51:12.636955 2022]
@@ -165,8 +165,8 @@ static int parse_date_apache(char * line, logdata *l) {
     tm.tm_isdst = -1;
     strptime(datetime, "%A %b %0d %H:%M:%S %Y", &tm);
 
-    char date[20] = {0};
-    strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", &tm);
+    char date[80] = {0};
+    snprintf(date, sizeof(date), "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     l->log_date_iso = mscl_stradd(l, date, 19);
     float mili = strtof(millisec, NULL);
     l->log_date_timestamp = mktime(&tm);
@@ -175,7 +175,7 @@ static int parse_date_apache(char * line, logdata *l) {
     return 0;
 }
 
-static int parse_date_nginx(char * line, logdata *l) {
+static int parse_date_nginx(const char * line, logdata *l) {
 
     // 2022/12/20 17:04:13
     // 0         0       8
@@ -189,15 +189,15 @@ static int parse_date_nginx(char * line, logdata *l) {
     tm.tm_isdst = -1;
     strptime(datetime, "%Y/%m/%d %H:%M:%S", &tm);
 
-    char date[20] = {0};
-    strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", &tm);
+    char date[80] = {0};
+    snprintf(date, sizeof(date), "%04d-%02d-%02d %02d:%02d:%02d", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     l->log_date_iso = mscl_stradd(l, date, 19);
     l->log_date_timestamp = mktime(&tm);
 
     return 0;
 }
 
-static int find_pattern(char * line, size_t offset, size_t maxlen, char *pattern, size_t minlen, size_t (*matches)[2], match_type mtype) {
+static int find_pattern(char * line, size_t offset, size_t maxlen, const char *pattern, size_t minlen, size_t (*matches)[2], match_type mtype) {
     int      matchcnt      = 0;
 
     // get length of pattern, initialize minpatt
@@ -209,7 +209,7 @@ static int find_pattern(char * line, size_t offset, size_t maxlen, char *pattern
 
     // find first occurrence of pattern or subpattern (if minlen LT pattlen)
     // if we do not find it, return to caller
-    char *p = strstr(line+offset, pattern);
+    const char *p = strstr(line+offset, pattern);
     if (p == NULL) {
         if (minlen < pattlen) {
             p = strstr(line+offset, minpatt);
@@ -308,7 +308,7 @@ static int find_pattern(char * line, size_t offset, size_t maxlen, char *pattern
     return matchcnt;
 }
 
-void parse_ap_warning_message(logdata *l) {
+static void parse_ap_warning_message(logdata *l) {
 
     // parse one of these structures:
 
@@ -420,7 +420,7 @@ void parse_ap_warning_message(logdata *l) {
     }
 }
 
-void parse_ngx_warning_message(logdata *l) {
+static void parse_ngx_warning_message(logdata *l) {
 
     // parse one of these structures:
 
@@ -499,7 +499,7 @@ void parse_ngx_warning_message(logdata *l) {
     }
 }
 
-static void find_tags(char *line, size_t *offset, logdata *l) {
+static void find_tags(char *line, const size_t *offset, logdata *l) {
 
     size_t matches[2] = { *offset, 0 };
     int mcnt = 1;
@@ -704,14 +704,13 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
     size_t  lastpos = matches[0] + matches[1];
     int           k;         // position in line
     char tfield[20] = {0};
-    match_type   mt;
 
     // find the pattern in the line from the current position,
     // and copy the value if it found
     while(lastpos-1 < l->log_entry_raw_length && fields[fi][0] != '\0') {
         // if last matches was success, copy the string to its value
         memset(matches, '\0', sizeof(size_t)*2);
-        mt = ((fi == 9) ? MATCH_FIRST : MATCH_LAST);
+        match_type mt = ((fi == 9) ? MATCH_FIRST : MATCH_LAST);
         mcnt = find_pattern(line, lastpos-1, l->log_entry_raw_length, fields[fi], 3, &matches, mt);
         if (mcnt > 0) {
             // if the found pattern is shorter than given, check
@@ -844,7 +843,7 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
     return;
 }
 
-void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype) {
+static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype) {
 
     size_t matches[2], prevstart;
     int mcnt = 0;
@@ -968,7 +967,7 @@ void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype
             set_error(l, "Field [line] is truncated!", errpos[0], errpos[1]);
         }
 
-        prevstart = matches[0]+1;
+        prevstart = matches[0]+1;  // cppcheck-suppress unreadVariable
         lastpos = matches[0] + matches[1];
         *pos = lastpos;
     }
@@ -1148,7 +1147,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                         if (hostpos > 0) {
                             int k = toffset+1;
                             int i = 0;
-                            while(k < hostpos-1 && k < len) {
+                            while(k < hostpos-1 && k < len && line[k] != '\0') {
                                 tbuff[i++] = line[k++];
                             }
                             tbuff[i] = '\0';
@@ -1165,7 +1164,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                             if (hostpos > 0) {
                                 int k = toffset+1;
                                 int i = 0;
-                                while(k < hostpos-1 && k < len) {
+                                while(k < hostpos-1 && k < len && line[k] != '\0') {
                                     tbuff[i++] = line[k++];
                                 }
                                 tbuff[i] = '\0';

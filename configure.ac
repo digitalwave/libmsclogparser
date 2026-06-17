@@ -1,5 +1,5 @@
 
-AC_INIT([msclogparser], [0.3.0], [modsecurity@digitalwave.hu])
+AC_INIT([msclogparser], [1.0.0], [modsecurity@digitalwave.hu])
 #AM_INIT_AUTOMAKE([foreign subdir-objects])
 
 AC_CONFIG_SRCDIR([src/])
@@ -234,9 +234,11 @@ AS_IF([test "x$wantphpbinding" = xtrue],[
     PHP_EXT_DIR=`${PHP_CONFIG} --extension-dir`
 
     OLD_CPPFLAGS="$CPPFLAGS"
+    OLD_CFLAGS="$CFLAGS"
     OLD_LDFLAGS="$LDFLAGS"
 
-    CPPFLAGS="$CPPFLAGS $PHP_INCLUDE_PATH"
+    CPPFLAGS="$CPPFLAGS $PHP_INCLUDE_PATH -D_GNU_SOURCE"
+    CFLAGS="$CFLAGS $PHP_INCLUDE_PATH -D_GNU_SOURCE"
     LDFLAGS="$LDFLAGS $PHP_LDFLAGS $PHP_LIBS"
 
     AC_CHECK_HEADERS([php.h], [], [AC_MSG_ERROR([php.h not found.])], [])
@@ -246,6 +248,7 @@ AS_IF([test "x$wantphpbinding" = xtrue],[
     BINDING_CLEAN="${BINDING_CLEAN} clean-php"
 
     CPPFLAGS="$OLD_CPPFLAGS"
+    CFLAGS="$OLD_CFLAGS"
     LDFLAGS="$OLD_LDFLAGS"
 
     AC_SUBST(PHP_INCLUDE_PATH)

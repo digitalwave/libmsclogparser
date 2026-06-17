@@ -1,7 +1,7 @@
 /*
 This file is part of the libmsclogparser project.
 
-Copyright (c) 2023-2025 Digitalwave
+Copyright (c) 2023-2026 Digitalwave
 
 Authors: Ervin Hegedüs <airween@digitalwave.hu>
 
@@ -51,14 +51,14 @@ modsecurity@digitalwave.hu
 #include "php.h"
 #include "ext/standard/info.h"
 
-#include "msclogparser.h"
+#include "../src/msclogparser.h"
 
-#define MODULE_VERSION "0.3.0"
+#define MODULE_VERSION "1.0.0"
 
 extern zend_module_entry mscphplogparser_module_entry;
 # define phpext_mscphplogparser_ptr &mscphplogparser_module_entry
 
-# define PHP_MSCPHPLOGPARSER_VERSION "0.3"
+# define PHP_MSCPHPLOGPARSER_VERSION "1.0"
 
 
 PHP_MINIT_FUNCTION(mscphplogparser);
@@ -160,8 +160,8 @@ PHP_FUNCTION(parse)
             add_next_index_string(&errors, logerr.errmsg);
             zval pairs;
             array_init(&pairs);
-            add_next_index_long(&pairs, logerr.startpos);
-            add_next_index_long(&pairs, logerr.endpos);
+            add_next_index_long(&pairs, *logerr.startpos);
+            add_next_index_long(&pairs, *logerr.endpos);
             add_next_index_zval(&errorspos, &pairs);
         }
     }

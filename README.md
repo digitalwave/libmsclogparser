@@ -74,7 +74,7 @@ This means, we can apply any pull requests from any contributor after the agreem
 
 ## Current version
 
-The current version of library is `0.3.0`.
+The current version of library is `1.0.0`.
 
 ## API
 
@@ -116,41 +116,47 @@ Originally, this is a C structure,
 
 ```C
 typedef struct logdata {
-    msclogpool      datapool;
     int             entry_is_modsecline;
     int             entry_is_broken;
     size_t          log_entry_raw_length;
-    char            *log_date_iso;
     double          log_date_timestamp;
-    char            *log_client;
     logmsgtype      log_entry_class;
-    char            *log_modsec_msg;
     size_t          log_modsec_msg_length;
-    char            *log_modsec_reason;
-    char            *log_modsec_operator;
-    char            *log_modsec_operand;
-    char            *log_modsec_target_name;
-    char            *log_modsec_target_value;
-    char            *log_modsec_process_error;
-    char            *log_rule_file;
-    char            *log_rule_line;
-    char            *log_rule_id;
-    char            *log_rule_rev;
-    char            *log_rule_msg;
-    char            *log_rule_data;
-    char            *log_rule_severity;
-    char            *log_rule_version;
-    char            *log_rule_maturity;
-    char            *log_rule_accuracy;
     size_t          log_rule_tags_cnt;
-    char            *log_rule_tags;
-    char            *log_hostname;
-    char            *log_uri;
-    char            *log_unique_id;
-    msclogpool      lineerrpool;
     int             log_entry_errors_cnt;
+    char          * fields[LOGFIELD_LOG_UNIQUE_ID+1];
+    msclogpool      datapool;
+    msclogpool      lineerrpool;
 } logdata;
+
+#define log_date_iso               fields[LOGFIELD_LOG_DATE_ISO]
+#define log_client                 fields[LOGFIELD_LOG_CLIENT]
+#define log_modsec_msg             fields[LOGFIELD_LOG_MODSEC_MSG]
+#define log_modsec_reason          fields[LOGFIELD_LOG_MODSEC_REASON]
+#define log_modsec_operator        fields[LOGFIELD_LOG_MODSEC_OPERATOR]
+#define log_modsec_operand         fields[LOGFIELD_LOG_MODSEC_OPERAND]
+#define log_modsec_target_name     fields[LOGFIELD_LOG_MODSEC_TARGET_NAME]
+#define log_modsec_target_value    fields[LOGFIELD_LOG_MODSEC_TARGET_VALUE]
+#define log_modsec_process_error   fields[LOGFIELD_LOG_MODSEC_PROCESS_ERROR]
+#define log_rule_file              fields[LOGFIELD_LOG_RULE_FILE]
+#define log_rule_line              fields[LOGFIELD_LOG_RULE_LINE]
+#define log_rule_id                fields[LOGFIELD_LOG_RULE_ID]
+#define log_rule_rev               fields[LOGFIELD_LOG_RULE_REV]
+#define log_rule_msg               fields[LOGFIELD_LOG_RULE_MSG]
+#define log_rule_data              fields[LOGFIELD_LOG_RULE_DATA]
+#define log_rule_severity          fields[LOGFIELD_LOG_RULE_SEVERITY]
+#define log_rule_version           fields[LOGFIELD_LOG_RULE_VERSION]
+#define log_rule_maturity          fields[LOGFIELD_LOG_RULE_MATURITY]
+#define log_rule_accuracy          fields[LOGFIELD_LOG_RULE_ACCURACY]
+#define log_rule_tags              fields[LOGFIELD_LOG_RULE_TAGS]
+#define log_hostname               fields[LOGFIELD_LOG_HOSTNAME]
+#define log_uri                    fields[LOGFIELD_LOG_URI]
+#define log_unique_id              fields[LOGFIELD_LOG_UNIQUE_ID]
 ```
+
+The structure has been refactored to use a flexible array of strings `fields` to store all dynamically allocated string data.
+
+Eg. you can get rule msg with `log->log_rule_msg` and you can get modsecurity msg with `log->log_modsec_msg`, but you can refer to the same field in different ways: `log_rule_msg == fields[LOGFIELD_LOG_RULE_MSG]`, or `log_modsec_msg == fields[LOGFIELD_LOG_MODSEC_MSG]`.
 
 Lets see what field contains which data.
 
@@ -805,7 +811,7 @@ At the end of the `configure` script run you will see the summary:
 ```
 ----------------------------------------------------------------------
 
- msclogparser Version 0.3.0 configuration:
+ msclogparser Version 1.0.0 configuration:
 
  OS Type        Linux
  Prefix         /usr/local
