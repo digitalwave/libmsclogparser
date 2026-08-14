@@ -1,3 +1,8 @@
+v1.0.1 - 2026-08.14
+-------------------
+  * Fix possible segfault if the "Warning. ..." message is too
+    long in apache's error.log
+
 v1.0.0 - 2026-06-17
 -------------------
   * The C structure of the structure library has been
