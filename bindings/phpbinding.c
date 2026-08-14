@@ -53,7 +53,7 @@ modsecurity@digitalwave.hu
 
 #include "../src/msclogparser.h"
 
-#define MODULE_VERSION "1.0.0"
+#define MODULE_VERSION "1.0.1"
 
 extern zend_module_entry mscphplogparser_module_entry;
 # define phpext_mscphplogparser_ptr &mscphplogparser_module_entry

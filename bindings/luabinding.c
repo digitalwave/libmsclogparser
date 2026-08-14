@@ -53,7 +53,7 @@ modsecurity@digitalwave.hu
 
 #include "../src/msclogparser.h"
 
-#define MODULE_VERSION "1.0.0"
+#define MODULE_VERSION "1.0.1"
 
 static int msclualogparser_parse (lua_State *L) {
     int n = lua_gettop(L);

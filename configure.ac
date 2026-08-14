@@ -1,5 +1,5 @@
 
-AC_INIT([msclogparser], [1.0.0], [modsecurity@digitalwave.hu])
+AC_INIT([msclogparser], [1.0.1], [modsecurity@digitalwave.hu])
 #AM_INIT_AUTOMAKE([foreign subdir-objects])
 
 AC_CONFIG_SRCDIR([src/])

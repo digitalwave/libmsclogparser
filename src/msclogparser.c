@@ -342,6 +342,16 @@ static void parse_ap_warning_message(logdata *l) {
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^ to here
     size_t msgpos = 9;
 
+    // defensive guard: if the message is shorter than "Warning. " itself,
+    // l->log_modsec_msg_length - 9 would underflow (size_t is unsigned)
+    // and lead to an out-of-bounds access below. This should not normally
+    // happen if the caller only invokes this function after a successful
+    // parse_regular() call, but guard against it regardless.
+    if (l->log_modsec_msg_length > 0 && l->log_modsec_msg_length < msgpos) {
+        set_error(l, "Warning message is too short to parse!", 0, l->log_modsec_msg_length);
+        return;
+    }
+
     mcnt = find_pattern(l->log_modsec_msg, msgpos, l->log_modsec_msg_length, "\"", 1, &matches, MATCH_FIRST);
     if (mcnt == 0) {
         mcnt = find_pattern(l->log_modsec_msg, msgpos, l->log_modsec_msg_length, " at ", 4, &matches, MATCH_FIRST);
@@ -657,7 +667,7 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     return;
 }
 
-static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype linetype) {
+static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linetype) {
 
     size_t matches[2], prevstart;
     int mcnt = 0;
@@ -679,7 +689,7 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
     else {
         // if no ' [file ' pattern, the line is broken
         set_error(l, "Can't find [file] field!", *pos, l->log_entry_raw_length);
-        return;
+        return 1;
     }
     // store the previous match position (+2 is because we leave the leading ' [')
     prevstart = matches[0]+2; // +2 -> leading space + [
@@ -815,7 +825,7 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
             }
             else {
                 set_error(l, "Unknown character!", k, k);
-                return;
+                return 1;
             }
 
             prevstart = matches[0]+2;
@@ -840,7 +850,7 @@ static void parse_regular(char * line, size_t *pos, logdata *l, loglinetype line
 
     parse_tail(linetype, line, pos, l, NULL);
 
-    return;
+    return 0;
 }
 
 static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype linetype) {
@@ -1122,11 +1132,17 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                 l->log_entry_class = LOGMSG_WARNING;
             }
             if (mcnt == 1 && toffset == matches[0]-1) {
-                parse_regular(line, &toffset, l, LOG_TYPE_APACHE);
+                int regular_ok = parse_regular(line, &toffset, l, LOG_TYPE_APACHE);
                 if (l->log_entry_class == LOGMSG_UNKNOWN) {
                     l->log_entry_class = LOGMSG_ACCDENIED;
                 }
-                if (l->log_entry_class == LOGMSG_WARNING) {
+                // only safe to parse the warning message if parse_regular()
+                // actually found the '[file ...]' field and set
+                // l->log_modsec_msg / l->log_modsec_msg_length; otherwise
+                // log_modsec_msg_length stays 0 and the size_t arithmetic in
+                // parse_ap_warning_message() underflows, causing an
+                // out-of-bounds access (segfault).
+                if (regular_ok == 0 && l->log_entry_class == LOGMSG_WARNING) {
                     parse_ap_warning_message(l);
                 }
             }

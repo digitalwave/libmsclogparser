@@ -50,7 +50,7 @@ modsecurity@digitalwave.hu
 
 #include "../src/msclogparser.h"
 
-#define MODULE_VERSION "1.0.0"
+#define MODULE_VERSION "1.0.1"
 
 static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE arg3) {
 
