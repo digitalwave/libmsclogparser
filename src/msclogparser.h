@@ -128,7 +128,8 @@ typedef enum logfields {
     LOGFIELD_LOG_RULE_TAGS,
     LOGFIELD_LOG_HOSTNAME,
     LOGFIELD_LOG_URI,
-    LOGFIELD_LOG_UNIQUE_ID
+    LOGFIELD_LOG_UNIQUE_ID,
+    LOGFIELD_LOG_SERVER
 } logfields;
 
 
@@ -141,7 +142,7 @@ typedef struct logdata {
     size_t          log_modsec_msg_length;
     size_t          log_rule_tags_cnt;
     int             log_entry_errors_cnt;
-    char          * fields[LOGFIELD_LOG_UNIQUE_ID+1];
+    char          * fields[LOGFIELD_LOG_SERVER+1];
     msclogpool      datapool;
     msclogpool      lineerrpool;
 } logdata;
@@ -169,6 +170,7 @@ typedef struct logdata {
 #define log_hostname               fields[LOGFIELD_LOG_HOSTNAME]
 #define log_uri                    fields[LOGFIELD_LOG_URI]
 #define log_unique_id              fields[LOGFIELD_LOG_UNIQUE_ID]
+#define log_server                 fields[LOGFIELD_LOG_SERVER]
 
 typedef char * logvalptr;
 

@@ -93,7 +93,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         }
     }
 
-    PyObject * rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:i,s:O,s:s,s:s,s:s,s:i,s:O,s:O}",
+    PyObject * rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:i,s:O,s:s,s:s,s:s,s:s,s:i,s:O,s:O}",
         "entry_is_modsecline",        l.entry_is_modsecline,
         "entry_is_broken",            l.entry_is_broken,
         "log_entry_raw_length",       l.log_entry_raw_length,
@@ -124,6 +124,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         "log_hostname",               l.log_hostname,
         "log_uri",                    l.log_uri,
         "log_unique_id",              l.log_unique_id,
+        "log_server",                 l.log_server,
         "log_entry_errors_cnt",       l.log_entry_errors_cnt,
         "log_entry_errors",           errors,
         "log_entry_errors_pos",       errorspos
