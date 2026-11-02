@@ -832,6 +832,12 @@ At the end of the `configure` script run you will see the summary:
 
 Now you type `make` and `sudo make install`. This will build the library, and the modules for interpreters. Also will install the compiled modules to the destination directories.
 
+To run the tests, type `make check`. The tests are plain C programs under `tests/`, without any framework. Without `configure` (or with sanitizers) you can run the same tests with the `tests/run-tests.sh` script, eg.:
+
+```bash
+CFLAGS="-g -fsanitize=address,undefined" tests/run-tests.sh
+```
+
 ## Naming convention
 To avoid the name collison of modules in the `bindings/` directory, the compiled modules will have different names: `mscpylogparser.so` for Python, `msclualogparser.so` for Lua, `mscrubylogparser.so` for Ruby, and `mscphplogparser.so` for PHP.
 
