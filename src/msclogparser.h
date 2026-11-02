@@ -73,8 +73,27 @@ typedef enum logmsgtype {
     LOGMSG_AUDITLOG
 } logmsgtype;
 
+/*
+ * Size of the data pool and of the error pool. Both pools are embedded in
+ * logdata, so this value is part of the ABI: the library and every caller
+ * (bindings, applications) must see the same number. It is therefore fixed
+ * and can't be overridden with -D.
+ *
+ * MSCLOG_TEST_POOL_SIZE is for the library's own tests only ("make check"),
+ * where the library source and the test program are compiled together with
+ * the same flags. An installed library or a binding must never define it.
+ */
+#ifdef MSCLOGPOOL_SIZE
+#error "MSCLOGPOOL_SIZE is part of the ABI and can't be overridden"
+#endif
+#ifdef MSCLOG_TEST_POOL_SIZE
+#define MSCLOGPOOL_SIZE MSCLOG_TEST_POOL_SIZE
+#else
+#define MSCLOGPOOL_SIZE 8192
+#endif
+
 typedef struct msclogpool {
-    char    pool[8192];
+    char    pool[MSCLOGPOOL_SIZE];
     char    *currptr;
     size_t  offset;
 } msclogpool;

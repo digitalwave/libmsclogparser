@@ -164,8 +164,10 @@ Lets see what field contains which data.
 This is a pre-allocated memory pool with fix size. Basicly, that's a structure:
 
 ```C
+#define MSCLOGPOOL_SIZE 8192
+
 typedef struct msclogpool {
-    char    pool[8192];
+    char    pool[MSCLOGPOOL_SIZE];
     char    *currptr;
     size_t  offset;
 } msclogpool;
@@ -174,6 +176,8 @@ typedef struct msclogpool {
 Type: `msclogpool`
 
 This needed for the parser to work, you do not need to know about - **do not touch it or read/write it**!
+
+The size of the pool is part of the ABI (the pools are embedded in `logdata`), so it is fixed: `MSCLOGPOOL_SIZE` can't be overridden at compile time. If a line has more data than fits into the pool, the values are truncated (or empty), and the line is marked as broken with an error message; the parser never writes past the pool.
 
 ##### `entry_is_modsecline`
 Indicates that the line is produced by ModSecurity.
