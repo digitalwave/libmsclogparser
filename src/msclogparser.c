@@ -634,6 +634,9 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             set_error(l, "[hostname] field is truncated!", *startpos, l->log_entry_raw_length);
             return;
         }
+        if (t == tlen && line[k] != '"' && line[k] != '\0') {
+            set_error(l, "[hostname] field is truncated!", matches[0] + matches[1], k);
+        }
         tbuff[t] = '\0';
         l->log_hostname = mscl_stradd(l, tbuff, t);
         *startpos = k;
@@ -660,6 +663,9 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             set_error(l, "[unique_id] field is truncated!", *startpos, l->log_entry_raw_length);
             return;
         }
+        if (t == tlen && line[k] != '"') {
+            set_error(l, "[unique_id] field is truncated!", matches[0] + matches[1], k);
+        }
         tbuff[t] = '\0';
         l->log_unique_id = mscl_stradd(l, tbuff, t);
         uniquefirst = matches[0];
@@ -682,11 +688,17 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             set_error(l, "[uri] field is truncated!", uniquefirst, l->log_entry_raw_length);
             return;
         }
-        // t is the length of the copied string, t-1 is the last char
-        // remove trailing ' ', ']' and '"' if exists
-        while (t > 0 && tbuff[t-1] == ' ') t--;
-        if (t > 0 && tbuff[t-1] == ']') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
-        if (t > 0 && tbuff[t-1] == '"') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
+        if (k < uniquefirst) {
+            // the buffer is full, the trailing '"]' is not copied
+            set_error(l, "[uri] field is truncated!", matches[0] + matches[1], uniquefirst);
+        }
+        else {
+            // t is the length of the copied string, t-1 is the last char
+            // remove trailing ' ', ']' and '"' if exists
+            while (t > 0 && tbuff[t-1] == ' ') t--;
+            if (t > 0 && tbuff[t-1] == ']') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
+            if (t > 0 && tbuff[t-1] == '"') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
+        }
         tbuff[t] = '\0';
         l->log_uri = mscl_stradd(l, tbuff, t);
     }
@@ -707,6 +719,9 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             t = 0;
             while(k < l->log_entry_raw_length && line[k] != '"' && t < tlen) {
                 tbuff[t++] = line[k++];
+            }
+            if (t == tlen && k < l->log_entry_raw_length && line[k] != '"') {
+                set_error(l, "[host] field is truncated!", matches[0] + matches[1], k);
             }
             tbuff[t] = '\0';
             l->log_hostname = mscl_stradd(l, tbuff, t);
@@ -1233,6 +1248,9 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                             while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
                                 tbuff[i++] = line[k++];
                             }
+                            if (k < hostpos-1 && k < len && line[k] != '\0') {
+                                set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
+                            }
                             tbuff[i] = '\0';
                             l->log_modsec_msg = mscl_stradd(l, tbuff, i);
                         }
@@ -1249,6 +1267,9 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                                 int i = 0;
                                 while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
                                     tbuff[i++] = line[k++];
+                                }
+                                if (k < hostpos-1 && k < len && line[k] != '\0') {
+                                    set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
                                 }
                                 tbuff[i] = '\0';
                                 l->log_modsec_msg = mscl_stradd(l, tbuff, i);
