@@ -77,9 +77,16 @@ typedef enum ap_log_msg_type {
     AP_LOG_RULE
 } ap_log_msg_type;
 
+// padding after the error message, so the positions that follow it are
+// aligned for size_t (the pool itself is suitably aligned)
+static size_t mscl_errpad(size_t offset) {
+    return (sizeof(size_t) - offset % sizeof(size_t)) % sizeof(size_t);
+}
+
 void read_msclog_err(msclogpool *pool, msclogerr *err) {
     err->errmsg = pool->currptr;
     pool->currptr += strlen(err->errmsg) + 1;
+    pool->currptr += mscl_errpad(pool->currptr - pool->pool);
 
     err->startpos = (size_t *)pool->currptr;
     pool->currptr += sizeof(size_t);
@@ -118,7 +125,9 @@ static char * mscl_stradd(logdata *l, const char *src, size_t srclen) {
 static void set_error(logdata *l, const char *errmsg, size_t pos0, size_t pos1) {
     l->entry_is_broken = 1;
     size_t len = strlen(errmsg);
-    size_t needed = len + 1 + sizeof(size_t) * 2;
+    // room for the message, its NUL, the alignment padding before the positions
+    // (read_msclog_err), and the two positions
+    size_t needed = len + 1 + (sizeof(size_t) - 1) + sizeof(size_t) * 2;
 
     /* Bounds check: skip if error pool would overflow */
     if (l->lineerrpool.offset + needed > MSCLOGPOOL_SIZE) {
@@ -127,6 +136,7 @@ static void set_error(logdata *l, const char *errmsg, size_t pos0, size_t pos1) 
 
     strcpy(l->lineerrpool.currptr, errmsg);
     l->lineerrpool.offset += len+1;
+    l->lineerrpool.offset += mscl_errpad(l->lineerrpool.offset);
     l->lineerrpool.currptr = l->lineerrpool.pool + l->lineerrpool.offset;
 
     memcpy(l->lineerrpool.currptr, &pos0, sizeof(size_t));
