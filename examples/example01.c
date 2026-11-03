@@ -99,6 +99,7 @@ int main(int argc, char ** argv) {
                 printf(" hostname: '%s'\n", l.log_hostname);
                 printf(" uri: '%s'\n", l.log_uri);
                 printf(" unique_id: '%s'\n", l.log_unique_id);
+                printf(" server: '%s'\n", l.log_server);
             }
             else {
                 printf("Not a modsecurity line\n");

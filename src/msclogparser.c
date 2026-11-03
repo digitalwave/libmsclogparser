@@ -718,9 +718,16 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
         return;
     }
 
-    // Nginx [hostname ""] filed contains the server IP address, we have to process
-    // the last 'host: "..."' field
-    // enter this block only if hostname is empty, eg. log is chunked
+    // Nginx [hostname "..."] field: with ModSecurity-nginx built against
+    // libmodsecurity3 >= 3.0.13 the connector sets it from the client's Host
+    // header, or from the server block's server_name if there is no Host header
+    // (src/ngx_http_modsecurity_access.c); with older versions libmodsecurity3
+    // uses the server IP address. So it isn't the name of the server block that
+    // served the request: an unknown Host lands in the default block, but the
+    // log shows the invented name. That name is in log_server, see
+    // parse_ngx_server().
+    // If [hostname] is empty, eg. log is chunked, we have to process the
+    // 'host: "..."' field
     if (linetype == LOG_TYPE_NGINX && strlen(l->log_hostname) == 0) {
         memset(&matches, '\0', sizeof(size_t)*2);
         mcnt = find_pattern(line, hostlast, l->log_entry_raw_length, "host: \"", 7, &matches, MATCH_FIRST);
@@ -741,6 +748,87 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             set_error(l, "Can't find 'host: \"\"' field!", hostlast, l->log_entry_raw_length);
             return;
         }
+    }
+
+    return;
+}
+
+// Nginx appends its own context to the message of the ModSecurity connector,
+// see ngx_http_log_error() and ngx_http_log_error_handler() in
+// src/http/ngx_http_request.c:
+//
+//   MSG[ while ACTION], client: ADDR, server: NAME[, request: "LINE"]
+//       [, subrequest: "URI"][, upstream: "URL"][, host: "HOST"]
+//       [, referrer: "REFERER"]
+//
+// ADDR is the textual address of the peer (no ' ' or ','), NAME is the
+// first server_name of the server block that served the request (eg. "_" in
+// a default block, empty if it has no server_name), so unlike [hostname] it
+// doesn't depend on the client.
+// LINE, HOST and REFERER are written with "%V", without escaping, and the
+// ModSecurity message before the context (matched value, [uri]) isn't
+// escaped either, so a client can put a fake ', client: X, server: Y' before
+// and after the real one. Therefore neither the first nor the last
+// occurrence can be trusted: log_server is set only if there is exactly one
+// ', client: ADDR, server: ' in the line, otherwise it stays empty - an
+// injection can hide the value, but can't replace it. In that case one error
+// is recorded (the line is not marked broken, the parsing goes on).
+// The whole line is cut at NGX_MAX_ERROR_STR (2048) bytes with the LF, and
+// a cut line can lose the real context but keep a fake one, so a line of
+// that length isn't used either (also one error).
+#define NGX_MAX_ERROR_STR 2048
+
+// records an error that doesn't make the line broken
+static void set_warning(logdata *l, const char *errmsg, size_t pos0, size_t pos1) {
+    int broken = l->entry_is_broken;
+    set_error(l, errmsg, pos0, pos1);
+    l->entry_is_broken = broken;
+}
+
+static void parse_ngx_server(char *line, logdata *l) {
+
+    size_t matches[2];
+    size_t pos = 0;
+    size_t valpos = 0;
+    size_t k, a;
+    int cnt = 0;
+
+    if (l->log_entry_raw_length >= NGX_MAX_ERROR_STR - 1) {
+        set_warning(l, "log_server: line truncated, value not used", 0, l->log_entry_raw_length);
+        return;
+    }
+
+    while (pos < l->log_entry_raw_length) {
+        memset(matches, '\0', sizeof(size_t)*2);
+        if (find_pattern(line, pos, l->log_entry_raw_length, ", client: ", 10, &matches, MATCH_FIRST) == 0) {
+            break;
+        }
+        a = k = matches[0] + matches[1];
+        while(k < l->log_entry_raw_length && line[k] != ' ' && line[k] != ',') {
+            k++;
+        }
+        if (k > a && strncmp(line+k, ", server: ", 10) == 0) {
+            cnt++;
+            valpos = k + 10;
+        }
+        pos = a;
+    }
+
+    if (cnt > 1) {
+        set_warning(l, "log_server: ambiguous 'server:' context, value not used", 0, l->log_entry_raw_length);
+        return;
+    }
+    if (cnt != 1) {
+        return;
+    }
+
+    // NAME ends at the next field or at the end of line
+    k = valpos;
+    while(k < l->log_entry_raw_length && line[k] != ',' && k - valpos < 256) {
+        k++;
+    }
+    if (k - valpos < 256) {
+        l->log_server = mscl_stradd(l, line+valpos, k-valpos);
     }
 
     return;
@@ -1134,6 +1222,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
     l->log_hostname               = mscl_stradd(l, "", 0);
     l->log_uri                    = mscl_stradd(l, "", 0);
     l->log_unique_id              = mscl_stradd(l, "", 0);
+    l->log_server                 = mscl_stradd(l, "", 0);
 
     if (t == LOG_TYPE_APACHE) {
         // [Thu Sep 22 14:51:12.636955 2022] [security2:error] [pid 19765:tid 139903325140736] [client 165.232.134.42:52179]
@@ -1292,6 +1381,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
 
         if (t == LOG_TYPE_NGINX) {
             parse_regular(line, &toffset, l, LOG_TYPE_NGINX);
+            parse_ngx_server(line, l);
             memset(&matches, '\0', sizeof(size_t)*2);
             mcnt = find_pattern(line, toffset, len, ", client: ", 10, &matches, MATCH_FIRST);
             if (mcnt == 1) {

@@ -146,6 +146,7 @@ PHP_FUNCTION(parse)
     add_assoc_string(return_value, "log_hostname",      l.log_hostname);
     add_assoc_string(return_value, "log_uri",           l.log_uri);
     add_assoc_string(return_value, "log_unique_id",     l.log_unique_id);
+    add_assoc_string(return_value, "log_server",        l.log_server);
 
     add_assoc_long(return_value,   "log_entry_errors_cnt",    l.log_entry_errors_cnt);
     array_init(&errors);

@@ -222,6 +222,10 @@ static int msclualogparser_parse (lua_State *L) {
     lua_pushstring(L, l.log_unique_id);
     lua_settable(L, maintable);
 
+    lua_pushstring(L, "log_server");
+    lua_pushstring(L, l.log_server);
+    lua_settable(L, maintable);
+
 
     lua_pushstring(L, "log_entry_errors_cnt");
     lua_pushinteger(L, l.log_entry_errors_cnt);

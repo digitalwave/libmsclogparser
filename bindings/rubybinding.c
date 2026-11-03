@@ -103,6 +103,7 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
     rb_hash_aset(result, ID2SYM(rb_intern("log_hostname")), rb_str_new2(l.log_hostname));
     rb_hash_aset(result, ID2SYM(rb_intern("log_uri")), rb_str_new2(l.log_uri));
     rb_hash_aset(result, ID2SYM(rb_intern("log_unique_id")), rb_str_new2(l.log_unique_id));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_server")), rb_str_new2(l.log_server));
     rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_cnt")), INT2NUM(l.log_entry_errors_cnt));
 
     VALUE errors = rb_ary_new();
