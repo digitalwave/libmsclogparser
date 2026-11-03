@@ -725,7 +725,7 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     // uses the server IP address. So it isn't the name of the server block that
     // served the request: an unknown Host lands in the default block, but the
     // log shows the invented name. That name is in log_server, see
-    // parse_ngx_server().
+    // parse_ngx_context().
     // If [hostname] is empty, eg. log is chunked, we have to process the
     // 'host: "..."' field
     if (linetype == LOG_TYPE_NGINX && strlen(l->log_hostname) == 0) {
@@ -761,21 +761,23 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
 //       [, subrequest: "URI"][, upstream: "URL"][, host: "HOST"]
 //       [, referrer: "REFERER"]
 //
-// ADDR is the textual address of the peer (no ' ' or ','), NAME is the
-// first server_name of the server block that served the request (eg. "_" in
-// a default block, empty if it has no server_name), so unlike [hostname] it
-// doesn't depend on the client.
+// ADDR is the textual address of the peer (no ' ' or ','), it goes to
+// log_client. NAME is the first server_name of the server block that served
+// the request (eg. "_" in a default block, empty if it has no server_name),
+// so unlike [hostname] it doesn't depend on the client, it goes to log_server.
 // LINE, HOST and REFERER are written with "%V", without escaping, and the
-// ModSecurity message before the context (matched value, [uri]) isn't
-// escaped either, so a client can put a fake ', client: X, server: Y' before
-// and after the real one. Therefore neither the first nor the last
-// occurrence can be trusted: log_server is set only if there is exactly one
-// ', client: ADDR, server: ' in the line, otherwise it stays empty - an
-// injection can hide the value, but can't replace it. In that case one error
-// is recorded (the line is not marked broken, the parsing goes on).
+// ModSecurity message before the context (variable name, matched value,
+// [uri]) isn't escaped either, so a client can put a fake
+// ', client: X, server: Y' before and after the real one. Therefore neither
+// the first nor the last occurrence can be trusted: log_client and log_server
+// are set only if there is exactly one ', client: ADDR, server: ' in the
+// line, otherwise both stay empty - an injection can hide the values, but
+// can't replace them. In that case one error is recorded (the line is not
+// marked broken, the parsing goes on).
 // The whole line is cut at NGX_MAX_ERROR_STR (2048) bytes with the LF, and
-// a cut line can lose the real context but keep a fake one, so a line of
-// that length isn't used either (also one error).
+// a cut line can lose the real context but keep a fake one (eg. in a long
+// variable name, which isn't limited), so a line of that length isn't used
+// either (also one error).
 #define NGX_MAX_ERROR_STR 2048
 
 // records an error that doesn't make the line broken
@@ -785,16 +787,17 @@ static void set_warning(logdata *l, const char *errmsg, size_t pos0, size_t pos1
     l->entry_is_broken = broken;
 }
 
-static void parse_ngx_server(char *line, logdata *l) {
+static void parse_ngx_context(char *line, logdata *l) {
 
     size_t matches[2];
     size_t pos = 0;
+    size_t addrpos = 0, addrend = 0;
     size_t valpos = 0;
     size_t k, a;
     int cnt = 0;
 
     if (l->log_entry_raw_length >= NGX_MAX_ERROR_STR - 1) {
-        set_warning(l, "log_server: line truncated, value not used", 0, l->log_entry_raw_length);
+        set_warning(l, "client, server: line truncated, values not used", 0, l->log_entry_raw_length);
         return;
     }
 
@@ -809,17 +812,23 @@ static void parse_ngx_server(char *line, logdata *l) {
         }
         if (k > a && strncmp(line+k, ", server: ", 10) == 0) {
             cnt++;
+            addrpos = a;
+            addrend = k;
             valpos = k + 10;
         }
         pos = a;
     }
 
     if (cnt > 1) {
-        set_warning(l, "log_server: ambiguous 'server:' context, value not used", 0, l->log_entry_raw_length);
+        set_warning(l, "client, server: ambiguous context, values not used", 0, l->log_entry_raw_length);
         return;
     }
     if (cnt != 1) {
         return;
+    }
+
+    if (addrend - addrpos < 256) {
+        l->log_client = mscl_stradd(l, line+addrpos, addrend-addrpos);
     }
 
     // NAME ends at the next field or at the end of line
@@ -1381,21 +1390,12 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
 
         if (t == LOG_TYPE_NGINX) {
             parse_regular(line, &toffset, l, LOG_TYPE_NGINX);
-            parse_ngx_server(line, l);
+            // log_client and log_server
+            parse_ngx_context(line, l);
+            // classify the message only if the nginx context is in the line
             memset(&matches, '\0', sizeof(size_t)*2);
             mcnt = find_pattern(line, toffset, len, ", client: ", 10, &matches, MATCH_FIRST);
             if (mcnt == 1) {
-                int ci = 0;
-                int k = matches[0] + matches[1];
-                char client[50];
-                while(k < len && line[k] != ',' && ci < sizeof(client)-1) {
-                    client[ci++] = line[k++];
-                }
-                if (k < len && line[k] != ',') {
-                    set_error(l, "client field is truncated!", matches[0] + matches[1], k);
-                }
-                client[ci] = '\0';
-                l->log_client = mscl_stradd(l, client, ci);
                 // possible messages:
                 // 
                 // Matched "Operator `OP' with parameter `PARAM' against variable `VARIABLE' (Value: `VALUE' )
