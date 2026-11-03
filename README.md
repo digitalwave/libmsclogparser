@@ -590,9 +590,10 @@ This field can't be chunked.
 ##### `log_server`
 Contains the `server_name` of the Nginx `server` block that served the request, from the `, server: ` part that Nginx appends to the line, eg. `_` for a default server. Compare to `log_hostname`, which is the `Host` the client sent.
 
-It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part, the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken.
+It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part or the name is longer than 255 bytes, the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken.
 
 Type: `*char`
+Max length: 255 bytes
 Eg.:
 ```
 ... [hostname "asdf.invalid"] [uri "/"] [unique_id "168142074224.426959"] ..., client: 192.0.2.10, server: _, request: "GET / HTTP/1.1", host: "asdf.invalid"
@@ -737,6 +738,7 @@ The given structure from the `parse()` method is a bit different than the C stru
         "log_hostname": "modsecurity.digitalwave.hu",
         "log_uri": "/.env",
         "log_unique_id": "aWVkQc5DKnYkg6rxU5qO6gAAAFI",
+        "log_server": "",
         "log_entry_errors_cnt": 0,
         "log_entry_errors": [],
         "log_entry_errors_pos": []
@@ -784,6 +786,7 @@ or an Nginx output:
         "log_hostname": "1.2.3.4",
         "log_uri": "/",
         "log_unique_id": "176880626392.586715",
+        "log_server": "_",
         "log_entry_errors_cnt": 0,
         "log_entry_errors": [],
         "log_entry_errors_pos": []
