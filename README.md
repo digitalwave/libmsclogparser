@@ -75,7 +75,7 @@ This means, we can apply any pull requests from any contributor after the agreem
 
 ## Current version
 
-The current version of library is `1.0.0`.
+The current version of library is `2.0.0`.
 
 ## API
 
@@ -836,7 +836,7 @@ At the end of the `configure` script run you will see the summary:
 ```
 ----------------------------------------------------------------------
 
- msclogparser Version 1.0.0 configuration:
+ msclogparser Version 2.0.0 configuration:
 
  OS Type        Linux
  Prefix         /usr/local
