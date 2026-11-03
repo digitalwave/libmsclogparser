@@ -1193,7 +1193,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
     l->datapool.offset = 0;
 
     // remove EOL-s from the end of line
-    while(len > 0 && (line[len-1] == '\0' || line[len-1] == '\n')) {
+    while(len > 0 && (line[len-1] == '\0' || line[len-1] == '\n' || line[len-1] == '\r')) {
         len--;
     }
     line[len] = '\0';

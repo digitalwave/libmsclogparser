@@ -71,6 +71,13 @@ static const server_case cases[] = {
     { .name = "no request field, nothing after server",
       .suffix = ", client: 192.0.2.10, server: _",
       .server = "_", .modsecline = -1, .broken = -1 },
+    // parse() removes the line ending, the CR of a CRLF too
+    { .name = "no request field, LF line ending",
+      .suffix = ", client: 192.0.2.10, server: _\n",
+      .server = "_", .modsecline = -1, .broken = -1 },
+    { .name = "no request field, CRLF line ending",
+      .suffix = ", client: 192.0.2.10, server: _\r\n",
+      .server = "_", .modsecline = -1, .broken = -1 },
     { .name = "no request field, host after server",
       .suffix = ", client: 192.0.2.10, server: _, host: \"a.example.test\"",
       .server = "_", .modsecline = -1, .broken = -1 },
