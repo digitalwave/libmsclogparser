@@ -47,6 +47,7 @@ The library is written in C, therefore you can embed it in other C, C++, Go or R
     * [log_hostname](#log_hostname)
     * [log_uri](#log_uri)
     * [log_unique_id](#log_unique_id)
+    * [log_server](#log_server)
     * [lineerrpool](#lineerrpool)
     * [log_entry_errors_cnt](#log_entry_errors_cnt)
   * [Methods](#methods)
@@ -124,7 +125,7 @@ typedef struct logdata {
     size_t          log_modsec_msg_length;
     size_t          log_rule_tags_cnt;
     int             log_entry_errors_cnt;
-    char          * fields[LOGFIELD_LOG_UNIQUE_ID+1];
+    char          * fields[LOGFIELD_LOG_SERVER+1];
     msclogpool      datapool;
     msclogpool      lineerrpool;
 } logdata;
@@ -152,6 +153,7 @@ typedef struct logdata {
 #define log_hostname               fields[LOGFIELD_LOG_HOSTNAME]
 #define log_uri                    fields[LOGFIELD_LOG_URI]
 #define log_unique_id              fields[LOGFIELD_LOG_UNIQUE_ID]
+#define log_server                 fields[LOGFIELD_LOG_SERVER]
 ```
 
 The structure has been refactored to use a flexible array of strings `fields` to store all dynamically allocated string data.
@@ -584,6 +586,22 @@ Y7Z3aSfpYv3U3aB8MPMHjAAAABY
 ```
 
 This field can't be chunked.
+
+##### `log_server`
+Contains the `server_name` of the Nginx `server` block that served the request, from the `, server: ` part that Nginx appends to the line, eg. `_` for a default server. Compare to `log_hostname`, which is the `Host` the client sent.
+
+It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part, the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken.
+
+Type: `*char`
+Eg.:
+```
+... [hostname "asdf.invalid"] [uri "/"] [unique_id "168142074224.426959"] ..., client: 192.0.2.10, server: _, request: "GET / HTTP/1.1", host: "asdf.invalid"
+```
+will give
+```
+_
+```
+while `log_hostname` is `asdf.invalid`.
 
 ##### `lineerrpool`
 This field contains the list of error messages and positions (start, end) where the error occurred.
