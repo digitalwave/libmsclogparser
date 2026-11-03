@@ -1,8 +1,9 @@
 /*
 This file is part of the libmsclogparser project.
 
-log_server: the nginx "server:" field, the server_name of the block that
-served the request. Table driven, one row per line shape.
+log_client and log_server: the nginx "client:" and "server:" fields, the
+address of the peer and the server_name of the block that served the
+request. Table driven, one row per line shape.
 
 nginx appends its context to the ModSecurity message
 (ngx_http_log_error_handler(), src/http/ngx_http_request.c):
@@ -10,8 +11,8 @@ nginx appends its context to the ModSecurity message
 The quoted values are not escaped, so a fake ", client: X, server: Y" can
 come both before (matched value, [uri]) and after (request line, host,
 referrer) the real one. The rule: exactly one ", client: ADDR, server: "
-in the line -> its NAME; otherwise an empty string and exactly one error
-message (ambiguous or truncated line). Parsing continues either way.
+in the line -> its ADDR and NAME; otherwise empty strings and exactly one
+error message (ambiguous or truncated line). Parsing continues either way.
 
 Build and run: make check (or tests/run-tests.sh).
 */
@@ -22,8 +23,8 @@ Build and run: make check (or tests/run-tests.sh).
 // the nginx error log line is cut at NGX_MAX_ERROR_STR (2048) bytes with the LF
 #define NGX_MAX_LINE 2047
 
-#define ERR_AMBIGUOUS "log_server: ambiguous 'server:' context, value not used"
-#define ERR_TRUNCATED "log_server: line truncated, value not used"
+#define ERR_AMBIGUOUS "client, server: ambiguous context, values not used"
+#define ERR_TRUNCATED "client, server: line truncated, values not used"
 
 #define REAL ", client: 192.0.2.10, server: www.example.test, request: \"GET /?q=1 HTTP/1.1\""
 #define FAKE ", client: 192.0.2.66, server: evil.example.test, request: "
@@ -71,34 +72,48 @@ static const server_case cases[] = {
     { .name = "no request field, nothing after server",
       .suffix = ", client: 192.0.2.10, server: _",
       .server = "_", .modsecline = -1, .broken = -1 },
+    // parse() removes the line ending, the CR of a CRLF too
+    { .name = "no request field, LF line ending",
+      .suffix = ", client: 192.0.2.10, server: _\n",
+      .server = "_", .modsecline = -1, .broken = -1 },
+    { .name = "no request field, CRLF line ending",
+      .suffix = ", client: 192.0.2.10, server: _\r\n",
+      .server = "_", .modsecline = -1, .broken = -1 },
     { .name = "no request field, host after server",
       .suffix = ", client: 192.0.2.10, server: _, host: \"a.example.test\"",
       .server = "_", .modsecline = -1, .broken = -1 },
     // a full fake ", client: X, server: Y": never the fake, empty, not an error
     { .name = "fake client+server in the matched value",
       .value = "1" FAKE "\"x", .suffix = REAL,
-      .server = "", .modsecline = -1, .broken = -1,
+      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
       .error = ERR_AMBIGUOUS },
     { .name = "fake client+server in the uri",
       .uri = "/a\"]" FAKE "\"x", .suffix = REAL,
-      .server = "", .modsecline = -1, .broken = -1,
+      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
       .error = ERR_AMBIGUOUS },
     { .name = "fake client+server in the request line",
       .suffix = ", client: 192.0.2.10, server: www.example.test, request: \"GET /?q=1" FAKE "\"x HTTP/1.1\"",
-      .server = "", .modsecline = -1, .broken = -1,
+      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
       .error = ERR_AMBIGUOUS },
     { .name = "fake client+server in the referrer",
       .suffix = REAL ", referrer: \"x" FAKE "\"y\"",
-      .server = "", .modsecline = -1, .broken = -1,
+      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
       .error = ERR_AMBIGUOUS },
     { .name = "fake client+server in the host",
       .suffix = REAL ", host: \"x" FAKE "\"y\"",
-      .server = "", .modsecline = -1, .broken = -1,
+      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
       .error = ERR_AMBIGUOUS },
     // only ", server: .." without a ", client: ADDR" before it: not a candidate
     { .name = "server fragment in the matched value",
       .value = "1, server: evil.example.test, request: \"x", .suffix = REAL,
-      .server = "www.example.test", .modsecline = -1, .broken = -1 },
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
+    // only ", client: .." without a ", server: " after it: not a candidate
+    { .name = "client fragment in the matched value",
+      .value = "1, client: 192.0.2.66, x", .suffix = REAL,
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
+    { .name = "client fragment in the uri",
+      .uri = "/a, client: 192.0.2.66, x", .suffix = REAL,
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
     { .name = "server fragment in the referrer",
       .suffix = REAL ", referrer: \"x, server: evil.example.test, request: \"y\"",
       .server = "www.example.test", .modsecline = -1, .broken = -1 },
@@ -109,11 +124,11 @@ static const server_case cases[] = {
     { .name = "line cut by nginx is not trusted",
       .suffix = FAKE "\"" "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" REAL, .cut_len = NGX_MAX_LINE,
       .not_in_line = ", client: 192.0.2.10",
-      .server = "", .modsecline = -1, .broken = -1,
+      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
       .error = ERR_TRUNCATED },
     { .name = "line shorter than the nginx cap is used",
       .value = "", .value_pad = 100, .suffix = REAL,
-      .server = "www.example.test", .modsecline = -1, .broken = -1 },
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
     { .name = "apache line has no server",
       .raw = "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1720626:tid 140234] "
              "[client 192.0.2.9:38148] ModSecurity: Warning. Operator GE matched 5 at "
@@ -185,6 +200,7 @@ int main(void) {
 
         CHECK(l.log_server != NULL && strcmp(l.log_server, c->server) == 0, "%s: log_server '%s'", c->name, l.log_server);
         CHECK(l.log_server == NULL || strstr(l.log_server, "evil") == NULL, "%s: log_server is the fake", c->name);
+        CHECK(l.log_client == NULL || strcmp(l.log_client, "192.0.2.66") != 0, "%s: log_client is the fake", c->name);
         CHECK(l.log_entry_errors_cnt == (c->error != NULL ? 1 : 0), "%s: errors_cnt %d", c->name, l.log_entry_errors_cnt);
         if (c->error != NULL) {
             CHECK(has_error(&l, c->error), "%s: missing error '%s'", c->name, c->error);

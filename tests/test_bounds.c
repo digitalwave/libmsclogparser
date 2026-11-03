@@ -197,11 +197,20 @@ static void test_long_client(void) {
     CHECK(strlen(l.log_client) < 50, "long client: client length %zu", strlen(l.log_client));
     CHECKV(has_error(&l, "[client] field is truncated!"), "long client: no error");
     free(s);
+    // nginx: the address is used up to 255 bytes, a longer one is dropped
     s = cat(NGX_HEAD, "Warning. Matched \"Operator `Rx' with parameter `x' against variable `ARGS:q' (Value: `1' )",
             FIELDS, " [hostname \"192.0.2.1\"] [uri \"/\"] [unique_id \"1\"], client: 192.0.2.", c, ", server: www.example.test", NULL);
     parse_line("long client nginx", s, LOG_TYPE_NGINX, &l);
-    CHECK(strlen(l.log_client) < 50, "long client nginx: client length %zu", strlen(l.log_client));
-    CHECKV(has_error(&l, "client field is truncated!"), "long client nginx: no error");
+    CHECKV(strlen(l.log_client) == 208 && strncmp(l.log_client, "192.0.2.999", 11) == 0, "long client nginx: client length %zu", strlen(l.log_client));
+    CHECKV(strcmp(l.log_server, "www.example.test") == 0, "long client nginx: server '%s'", l.log_server);
+    free(s);
+    free(c);
+    c = rep('9', 300);
+    s = cat(NGX_HEAD, "Warning. Matched \"Operator `Rx' with parameter `x' against variable `ARGS:q' (Value: `1' )",
+            FIELDS, " [hostname \"192.0.2.1\"] [uri \"/\"] [unique_id \"1\"], client: 192.0.2.", c, ", server: www.example.test", NULL);
+    parse_line("too long client nginx", s, LOG_TYPE_NGINX, &l);
+    CHECK(strcmp(l.log_client, "") == 0, "too long client nginx: client length %zu", strlen(l.log_client));
+    CHECKV(strcmp(l.log_server, "www.example.test") == 0, "too long client nginx: server '%s'", l.log_server);
     free(s);
     free(c);
 }

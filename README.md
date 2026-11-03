@@ -75,7 +75,7 @@ This means, we can apply any pull requests from any contributor after the agreem
 
 ## Current version
 
-The current version of library is `1.0.0`.
+The current version of library is `2.0.0`.
 
 ## API
 
@@ -237,7 +237,7 @@ will give
 Contains the parsed client source address and (in case of Apache) source port.
 
 Type: `*char`
-Max length: 49 bytes
+Max length: 49 bytes (Apache), 255 bytes (Nginx)
 Eg.:
 ```
 ...tid 139766615992064] [client 45.134.144.140:33326] [client... (Apache)
@@ -249,7 +249,7 @@ will give
 45.134.144.140 (Nginx)
 ```
 
-As you can see, in case of Apache the parser will process the first `[client]` field. In case of Nginx this value is at the end of the line.
+As you can see, in case of Apache the parser will process the first `[client]` field. In case of Nginx this value is at the end of the line, in the `, client: ADDR, server: NAME` part that Nginx appends to the line. This part isn't escaped, and the client can send a fake one (eg. in the request line, or in a header), so the value is used only in the same cases as [`log_server`](#log_server): if the line contains exactly one `, client: ADDR, server: `, and it isn't cut by Nginx. Otherwise `log_client` is an empty string; an injection can hide the address, but can't replace it.
 
 ##### `log_entry_class`
 Contains the parsed ModSecurity message type.
@@ -590,9 +590,10 @@ This field can't be chunked.
 ##### `log_server`
 Contains the `server_name` of the Nginx `server` block that served the request, from the `, server: ` part that Nginx appends to the line, eg. `_` for a default server. Compare to `log_hostname`, which is the `Host` the client sent.
 
-It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part, the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken.
+It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part or the name is longer than 255 bytes, the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken, and [`log_client`](#log_client) is empty too: the two values come from the same `, client: ADDR, server: NAME` part.
 
 Type: `*char`
+Max length: 255 bytes
 Eg.:
 ```
 ... [hostname "asdf.invalid"] [uri "/"] [unique_id "168142074224.426959"] ..., client: 192.0.2.10, server: _, request: "GET / HTTP/1.1", host: "asdf.invalid"
@@ -737,6 +738,7 @@ The given structure from the `parse()` method is a bit different than the C stru
         "log_hostname": "modsecurity.digitalwave.hu",
         "log_uri": "/.env",
         "log_unique_id": "aWVkQc5DKnYkg6rxU5qO6gAAAFI",
+        "log_server": "",
         "log_entry_errors_cnt": 0,
         "log_entry_errors": [],
         "log_entry_errors_pos": []
@@ -784,6 +786,7 @@ or an Nginx output:
         "log_hostname": "1.2.3.4",
         "log_uri": "/",
         "log_unique_id": "176880626392.586715",
+        "log_server": "_",
         "log_entry_errors_cnt": 0,
         "log_entry_errors": [],
         "log_entry_errors_pos": []
@@ -833,7 +836,7 @@ At the end of the `configure` script run you will see the summary:
 ```
 ----------------------------------------------------------------------
 
- msclogparser Version 1.0.0 configuration:
+ msclogparser Version 2.0.0 configuration:
 
  OS Type        Linux
  Prefix         /usr/local

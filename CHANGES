@@ -1,3 +1,25 @@
+v2.0.0 - 2026-11-03
+-------------------
+  * New field: log_server, the server_name of the Nginx server
+    block that served the request
+  * Nginx log_client and log_server are used only if the line
+    contains exactly one ", client: ADDR, server: NAME" part,
+    and isn't cut by Nginx (a client can send a fake one)
+  * Fix: Rule error lines fill log_rule_id, log_rule_file and
+    log_rule_line
+  * Bounds checks on the stack buffers and the data/error pools,
+    the truncated fields get an error message
+  * Fix possible crash if the operand of an Apache "Warning."
+    message contains ". "
+  * Align the error positions in the error pool
+  * Remove the CR of a CRLF line ending too
+  * Ruby binding: return every rule tag, not only the first
+  * Build: "./configure && make" without any binding doesn't run
+    make endlessly in bindings/
+  * Tests: make check
+  * ABI change: logdata has a new field, the SONAME is
+    libmsclogparser.so.2, rebuild the bindings and applications
+
 v1.0.1 - 2026-08.14
 -------------------
   * Fix possible segfault if the "Warning. ..." message is too

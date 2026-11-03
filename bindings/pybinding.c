@@ -52,7 +52,7 @@ modsecurity@digitalwave.hu
 #include "../src/msclogparser.h"
 
 
-#define MODULE_VERSION "1.0.1"
+#define MODULE_VERSION "2.0.0"
 
 static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log.";
 
