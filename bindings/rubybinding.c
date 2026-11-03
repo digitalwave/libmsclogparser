@@ -96,7 +96,7 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
     VALUE tags = rb_ary_new();
     for(size_t ti = 0; ti < l.log_rule_tags_cnt; ti++) {
         rb_ary_push(tags, rb_str_new2(l.log_rule_tags));
-        l.log_rule_tags += strlen(l.log_rule_tags);
+        l.log_rule_tags += strlen(l.log_rule_tags) + 1;
     }
     rb_hash_aset(result, ID2SYM(rb_intern("log_rule_tags")), tags);
 

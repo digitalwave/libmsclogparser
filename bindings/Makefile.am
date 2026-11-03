@@ -73,13 +73,15 @@ clean-php:
 endif
 
 
+# With no binding enabled the target lists are empty, and a bare $(MAKE)
+# would build "all" again, which calls all-local again, endlessly.
 all-local:
-	$(MAKE) $(BINDING_ALL)
+	test -z "$(BINDING_ALL)" || $(MAKE) $(BINDING_ALL)
 
 install-exec-local:
-	$(MAKE) $(BINDING_INSTALL_EXEC)
+	test -z "$(BINDING_INSTALL_EXEC)" || $(MAKE) $(BINDING_INSTALL_EXEC)
 	$(PYTHON_INSTALL_CMD)
 
 clean-local:
-	$(MAKE) $(BINDING_CLEAN)
+	test -z "$(BINDING_CLEAN)" || $(MAKE) $(BINDING_CLEAN)
 

@@ -57,6 +57,15 @@ modsecurity@digitalwave.hu
 
 #include <stdio.h>
 
+/* Internal stack buffer sizes, not part of the ABI: they can be overridden
+ * at compile time, e.g. -DMSCLOG_TBUFF_SIZE=65536 */
+#ifndef MSCLOG_TBUFF_SIZE
+#define MSCLOG_TBUFF_SIZE 4096
+#endif
+#ifndef MSCLOG_TLEN_SIZE
+#define MSCLOG_TLEN_SIZE 2048
+#endif
+
 typedef enum match_type {
     MATCH_FIRST = 1,
     MATCH_LAST
@@ -68,9 +77,16 @@ typedef enum ap_log_msg_type {
     AP_LOG_RULE
 } ap_log_msg_type;
 
+// padding after the error message, so the positions that follow it are
+// aligned for size_t (the pool itself is suitably aligned)
+static size_t mscl_errpad(size_t offset) {
+    return (sizeof(size_t) - offset % sizeof(size_t)) % sizeof(size_t);
+}
+
 void read_msclog_err(msclogpool *pool, msclogerr *err) {
     err->errmsg = pool->currptr;
     pool->currptr += strlen(err->errmsg) + 1;
+    pool->currptr += mscl_errpad(pool->currptr - pool->pool);
 
     err->startpos = (size_t *)pool->currptr;
     pool->currptr += sizeof(size_t);
@@ -81,7 +97,22 @@ void read_msclog_err(msclogpool *pool, msclogerr *err) {
     return;
 }
 
+// fields point to this if the data pool is full (never NULL, callers use strlen())
+static char mscl_emptystr[1] = "";
+
+static void set_error(logdata *l, const char *errmsg, size_t pos0, size_t pos1);
+
 static char * mscl_stradd(logdata *l, const char *src, size_t srclen) {
+    // the pool is full, nothing to store
+    if (l->datapool.offset >= MSCLOGPOOL_SIZE) {
+        return mscl_emptystr;
+    }
+    // truncate the string if the pool would overflow
+    size_t avail = MSCLOGPOOL_SIZE - l->datapool.offset;
+    if (srclen >= avail) {
+        srclen = avail - 1;
+        set_error(l, "Data pool is full, value is truncated!", 0, l->log_entry_raw_length);
+    }
     char * ptr = l->datapool.currptr;
     memcpy(l->datapool.currptr, src, srclen);
     l->datapool.offset += srclen + 1;
@@ -94,9 +125,18 @@ static char * mscl_stradd(logdata *l, const char *src, size_t srclen) {
 static void set_error(logdata *l, const char *errmsg, size_t pos0, size_t pos1) {
     l->entry_is_broken = 1;
     size_t len = strlen(errmsg);
+    // room for the message, its NUL, the alignment padding before the positions
+    // (read_msclog_err), and the two positions
+    size_t needed = len + 1 + (sizeof(size_t) - 1) + sizeof(size_t) * 2;
+
+    /* Bounds check: skip if error pool would overflow */
+    if (l->lineerrpool.offset + needed > MSCLOGPOOL_SIZE) {
+        return;
+    }
 
     strcpy(l->lineerrpool.currptr, errmsg);
     l->lineerrpool.offset += len+1;
+    l->lineerrpool.offset += mscl_errpad(l->lineerrpool.offset);
     l->lineerrpool.currptr = l->lineerrpool.pool + l->lineerrpool.offset;
 
     memcpy(l->lineerrpool.currptr, &pos0, sizeof(size_t));
@@ -125,20 +165,31 @@ static void copy_str_from_line(logdata *l, const char *line, char **dest, size_t
     if (line[pos] == ' ') pos++;    // step over the space, if it
     if (line[pos] == '"') pos++;    // step over the ", if it
 
+    // the pool is full, the field can't be stored
+    if (l->datapool.offset >= MSCLOGPOOL_SIZE) {
+        (*dest) = mscl_emptystr;
+        *is_broken = 1; (*errpos)[0] = tpos; (*errpos)[1] = tpos;
+        return;
+    }
+    // leave place for the terminating '\0' in the pool
+    if (maxlen > MSCLOGPOOL_SIZE - l->datapool.offset - 1) {
+        maxlen = MSCLOGPOOL_SIZE - l->datapool.offset - 1;
+    }
+
     // copy the characters till we reach the end
     while(pos < end && t < maxlen) {
         l->datapool.currptr[t++] = line[pos++];
     }
     l->datapool.currptr[t] = '\0';
-    t--;
+    // t is the length of the copied string, t-1 is the last char
     // remove trailing ' ', ']' and '"' if exists
-    while (l->datapool.currptr[t] == ' ') t--;
-    if (l->datapool.currptr[t] == ']') { t--; } else { *is_broken = 1; (*errpos)[0] = tpos; (*errpos)[1] = tpos+t; }
-    if (l->datapool.currptr[t] == '"') { t--; } else { *is_broken = 1; (*errpos)[0] = tpos; (*errpos)[1] = tpos+t; }
-    l->datapool.currptr[t+1] = '\0';
+    while (t > 0 && l->datapool.currptr[t-1] == ' ') t--;
+    if (t > 0 && l->datapool.currptr[t-1] == ']') { t--; } else { *is_broken = 1; (*errpos)[0] = tpos; (*errpos)[1] = tpos+t-1; }
+    if (t > 0 && l->datapool.currptr[t-1] == '"') { t--; } else { *is_broken = 1; (*errpos)[0] = tpos; (*errpos)[1] = tpos+t-1; }
+    l->datapool.currptr[t] = '\0';
 
     (*dest) = l->datapool.currptr;
-    l->datapool.offset += t+2;
+    l->datapool.offset += t+1;
     l->datapool.currptr = l->datapool.pool + l->datapool.offset;
 
     return;
@@ -347,7 +398,7 @@ static void parse_ap_warning_message(logdata *l) {
     // and lead to an out-of-bounds access below. This should not normally
     // happen if the caller only invokes this function after a successful
     // parse_regular() call, but guard against it regardless.
-    if (l->log_modsec_msg_length > 0 && l->log_modsec_msg_length < msgpos) {
+    if (l->log_modsec_msg_length < msgpos) {
         set_error(l, "Warning message is too short to parse!", 0, l->log_modsec_msg_length);
         return;
     }
@@ -360,7 +411,7 @@ static void parse_ap_warning_message(logdata *l) {
             // eg 'detected XSS using libinjection.'
             size_t startpos = 9; // length of "Warning. "
             size_t slen = l->log_modsec_msg_length - startpos;
-            if (l->log_modsec_msg[l->log_modsec_msg_length-1] == '.') {
+            if (slen > 0 && l->log_modsec_msg[l->log_modsec_msg_length-1] == '.') {
                 // skip '.'
                 slen--;
             }
@@ -375,7 +426,7 @@ static void parse_ap_warning_message(logdata *l) {
             l->log_modsec_reason = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
             startpos = matches[0]+matches[1];
             slen = l->log_modsec_msg_length - startpos;
-            if (l->log_modsec_msg[l->log_modsec_msg_length-1] == '.') {
+            if (slen > 0 && l->log_modsec_msg[l->log_modsec_msg_length-1] == '.') {
                 // skip '.'
                 slen--;
             }
@@ -387,7 +438,9 @@ static void parse_ap_warning_message(logdata *l) {
         // eg 'String match within "/accept-charset/ /content-encoding/ /proxy/ /lock-token/ /content-range/ /if/" at TX:header_name_accept-charset.'
         // matches[0] points here -^
         size_t startpos = 9; // len of "Warning. "
-        size_t slen = matches[0] - 10; // +1 is because of the space, eg: 'Matched phrase "...' after 'phrase ' or 'within '
+        size_t quotepos = matches[0];
+        // +1 is because of the space, eg: 'Matched phrase "...' after 'phrase ' or 'within '
+        size_t slen = (quotepos > 10) ? quotepos - 10 : 0;
         l->log_modsec_reason = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
         msgpos = matches[0] + matches[1];
         memset(matches, '\0', sizeof(size_t)*2);
@@ -400,23 +453,21 @@ static void parse_ap_warning_message(logdata *l) {
         }
         if (mcnt == 1) {
             // explicit 1 match
-            // old startpos points to reason, slen is the length
-            // end of the reason is startpos + length
-            // new startpos is startpos + slen + 1 + 1 (last +1 is because of the leading '"')
-            startpos = startpos + slen + 2;
+            // the operand starts after the leading '"'
+            startpos = quotepos + 1;
             // slen is new match[0] (prev. of found pos) - startpos
             slen = matches[0] - startpos;
             l->log_modsec_operand = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
             // check whether the last char is a '.'. This means there is the end of the warning message
             if (l->log_modsec_msg[l->log_modsec_msg_length-1] == '.') {
                 startpos = matches[0] + matches[1];
-                slen = l->log_modsec_msg_length - startpos - endoffset;
+                slen = (l->log_modsec_msg_length > startpos + endoffset) ? l->log_modsec_msg_length - startpos - endoffset : 0;
                 l->log_modsec_target_name = mscl_stradd(l, l->log_modsec_msg + startpos, slen);
             }
             else {
                 msgpos = matches[0] + matches[1];
                 memset(matches, '\0', sizeof(size_t)*2);
-                mcnt = find_pattern(l->log_modsec_msg, startpos, l->log_modsec_msg_length, ". ", 11, &matches, MATCH_FIRST);
+                mcnt = find_pattern(l->log_modsec_msg, msgpos, l->log_modsec_msg_length, ". ", 2, &matches, MATCH_FIRST);
                 if (mcnt == 1) {
                     slen = matches[0]-msgpos;
                     l->log_modsec_target_name = mscl_stradd(l, l->log_modsec_msg + msgpos, slen);
@@ -454,6 +505,13 @@ static void parse_ngx_warning_message(logdata *l) {
     size_t matches[2];
     memset(matches, '\0', sizeof(size_t)*2);
     int mcnt;
+
+    // defensive guard: the message must be longer than the prefix above,
+    // otherwise the offsets below point after the end of the message
+    if (l->log_modsec_msg_length <= offset) {
+        set_error(l, "Warning message is too short to parse!", 0, l->log_modsec_msg_length);
+        return;
+    }
 
     mcnt = find_pattern(l->log_modsec_msg, offset, l->log_entry_raw_length, "Matched \"Operator `", 19, &matches, MATCH_FIRST);
     if (mcnt == 0) {
@@ -532,6 +590,12 @@ static void find_tags(char *line, const size_t *offset, logdata *l) {
             }
         }
 
+        // the tags are read as a sequence from the pool, so stop if it's full
+        if (l->datapool.offset >= MSCLOGPOOL_SIZE) {
+            set_error(l, "Data pool is full, [tag] fields are dropped!", k, l->log_entry_raw_length);
+            break;
+        }
+
         size_t errpos[2] = { 0, 0 };
         int is_broken = 0;
         copy_str_from_line(l, line, &l->log_rule_tags, k, matches[0], 50, &errpos, &is_broken);
@@ -542,7 +606,7 @@ static void find_tags(char *line, const size_t *offset, logdata *l) {
         l->log_rule_tags_cnt++;
         if (is_broken == 1) {
             char err[50];
-            sprintf(err, "The %zu. [tag] field is truncated!", l->log_rule_tags_cnt);
+            snprintf(err, sizeof(err), "The %zu. [tag] field is truncated!", l->log_rule_tags_cnt);
             set_error(l, err, errpos[0], errpos[1]);
             break;
         }
@@ -564,7 +628,7 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     size_t matches[2];
     int k, t;
     int hostlast = 0;
-    size_t tlen = 2048;
+    size_t tlen = MSCLOG_TLEN_SIZE;
     int mcnt;
     char tbuff[tlen+1];
 
@@ -579,6 +643,9 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
         if (k == l->log_entry_raw_length) {
             set_error(l, "[hostname] field is truncated!", *startpos, l->log_entry_raw_length);
             return;
+        }
+        if (t == tlen && line[k] != '"' && line[k] != '\0') {
+            set_error(l, "[hostname] field is truncated!", matches[0] + matches[1], k);
         }
         tbuff[t] = '\0';
         l->log_hostname = mscl_stradd(l, tbuff, t);
@@ -606,6 +673,9 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             set_error(l, "[unique_id] field is truncated!", *startpos, l->log_entry_raw_length);
             return;
         }
+        if (t == tlen && line[k] != '"') {
+            set_error(l, "[unique_id] field is truncated!", matches[0] + matches[1], k);
+        }
         tbuff[t] = '\0';
         l->log_unique_id = mscl_stradd(l, tbuff, t);
         uniquefirst = matches[0];
@@ -628,13 +698,19 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             set_error(l, "[uri] field is truncated!", uniquefirst, l->log_entry_raw_length);
             return;
         }
-        t--;
-        // remove trailing ' ', ']' and '"' if exists
-        while (tbuff[t] == ' ') t--;
-        if (tbuff[t] == ']') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
-        if (tbuff[t] == '"') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
-        tbuff[t+1] = '\0';
-        l->log_uri = mscl_stradd(l, tbuff, t+1);
+        if (k < uniquefirst) {
+            // the buffer is full, the trailing '"]' is not copied
+            set_error(l, "[uri] field is truncated!", matches[0] + matches[1], uniquefirst);
+        }
+        else {
+            // t is the length of the copied string, t-1 is the last char
+            // remove trailing ' ', ']' and '"' if exists
+            while (t > 0 && tbuff[t-1] == ' ') t--;
+            if (t > 0 && tbuff[t-1] == ']') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
+            if (t > 0 && tbuff[t-1] == '"') { t--; } else { set_error(l, "[uri] field is truncated!", hostlast, l->log_entry_raw_length); }
+        }
+        tbuff[t] = '\0';
+        l->log_uri = mscl_stradd(l, tbuff, t);
     }
     else {
         // broken line
@@ -653,6 +729,9 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
             t = 0;
             while(k < l->log_entry_raw_length && line[k] != '"' && t < tlen) {
                 tbuff[t++] = line[k++];
+            }
+            if (t == tlen && k < l->log_entry_raw_length && line[k] != '"') {
+                set_error(l, "[host] field is truncated!", matches[0] + matches[1], k);
             }
             tbuff[t] = '\0';
             l->log_hostname = mscl_stradd(l, tbuff, t);
@@ -677,14 +756,18 @@ static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linet
     memset(matches, '\0', sizeof(size_t)*2);
     mcnt = find_pattern(line, *pos, l->log_entry_raw_length, " [file \"", 8, &matches, MATCH_LAST);
     if (mcnt > 0) {
-        char tbuff[4096];
+        char tbuff[MSCLOG_TBUFF_SIZE];
         int pi = 0;
-        for(size_t k = *pos+1; k < matches[0]; k++) {
+        for(size_t k = *pos+1; k < matches[0] && pi < MSCLOG_TBUFF_SIZE-1; k++) {
             tbuff[pi++] = line[k];
         }
         tbuff[pi] = '\0';
+        if (*pos+1+pi < matches[0]) {
+            set_error(l, "ModSecurity message is truncated!", *pos+1, matches[0]);
+        }
         l->log_modsec_msg = mscl_stradd(l, tbuff, pi);
-        l->log_modsec_msg_length = pi;
+        // the pool can truncate the message too
+        l->log_modsec_msg_length = strlen(l->log_modsec_msg);
     }
     else {
         // if no ' [file ' pattern, the line is broken
@@ -728,7 +811,7 @@ static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linet
             // if not, then it's not a (truncated) field
             if (strlen(fields[fi]) > matches[1]) {
                 size_t nextpos = matches[0]+matches[1];
-                if (line[nextpos] != ' ' && line[nextpos+1] != '[') {
+                if (line[nextpos] == '\0' || (line[nextpos] != ' ' && line[nextpos+1] != '[')) {
                     fi++;
                     continue;
                 }
@@ -812,7 +895,7 @@ static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linet
                 copy_str_from_line(l, line, tmp, k, matches[0], maxlen, &errpos, &is_broken);
                 if (is_broken == 1) {
                     char err[50];
-                    sprintf(err, "Field %s is truncated!", tfield);
+                    snprintf(err, sizeof(err), "Field %s is truncated!", tfield);
                     if (errpos[1] < errpos[0]) {
                         // this means there is no value
                         // 3 is the minimal length to recognize the field
@@ -857,7 +940,7 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
 
     size_t matches[2], prevstart;
     int mcnt = 0;
-    char tbuff[4096];
+    char tbuff[MSCLOG_TBUFF_SIZE];
 
     // find the ' [id ' pattern, usually it exists
     // its position is the end of the ModSec message
@@ -867,10 +950,13 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
         int pi = 0;
         // matches[0]-1 because of the leading space in front of
         // '[id '
-        for(size_t p = *pos+1; p < matches[0]-1; p++) {
+        for(size_t p = *pos+1; p < matches[0]-1 && pi < MSCLOG_TBUFF_SIZE-1; p++) {
             tbuff[pi++] = line[p];
         }
         tbuff[pi] = '\0';
+        if (*pos+1+pi < matches[0]-1) {
+            set_error(l, "ModSecurity message is truncated!", *pos+1, matches[0]-1);
+        }
         l->log_modsec_msg = mscl_stradd(l, tbuff, pi);
     }
     else {
@@ -940,7 +1026,7 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
                 copy_str_from_line(l, line, &tmp, k, matches[0], maxlen, &errpos, &is_broken);
                 if (is_broken == 1) {
                     char err[50];
-                    sprintf(err, "Field %s is truncated!", tfield);
+                    snprintf(err, sizeof(err), "Field %s is truncated!", tfield);
                     set_error(l, err, errpos[0], errpos[1]);
                     //break;
                 }
@@ -956,7 +1042,7 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
         else {
             l->entry_is_broken = 1;
             char err[50] = {0};
-            sprintf(err, "Can't find field: %s!", fields[fi]);
+            snprintf(err, sizeof(err), "Can't find field: %s!", fields[fi]);
             set_error(l, err, *pos, l->log_entry_raw_length);
             return;
         }
@@ -995,12 +1081,15 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
 
     int li = 0;
     k = lastpos+3;
-    while(k < hostpos) {
+    while(k < hostpos && li < MSCLOG_TBUFF_SIZE-1) {
         tbuff[li++] = line[k++];
     }
+    if (k < hostpos) {
+        set_error(l, "Rule error message is truncated!", lastpos+3, hostpos);
+    }
     // remove trailing spaces
-    while(tbuff[--li] == ' ');
-    tbuff[++li] = '\0';
+    while(li > 0 && tbuff[li-1] == ' ') li--;
+    tbuff[li] = '\0';
     l->log_modsec_process_error = mscl_stradd(l, tbuff, li);
 
     return;
@@ -1108,8 +1197,11 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
             int ci = 0;
             int k = pos;
             char client[50];
-            while(k < matches[0]-1 && k < len && line[k] != ']') {
+            while(k < matches[0]-1 && k < len && line[k] != ']' && ci < sizeof(client)-1) {
                 client[ci++] = line[k++];
+            }
+            if (k < len && line[k] != ']') {
+                set_error(l, "[client] field is truncated!", pos, k);
             }
             client[ci] = '\0';
             l->log_client = mscl_stradd(l, client, ci);
@@ -1153,7 +1245,7 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                     parse_rule_error(line, &toffset, l, LOG_TYPE_APACHE);
                 }
                 else {
-                    char tbuff[4096];
+                    char tbuff[MSCLOG_TBUFF_SIZE];
                     mcnt = find_pattern(line, toffset, toffset+14, "Request body", 12, &matches, MATCH_FIRST);
                     if (mcnt == 1) {
                         l->log_entry_class = LOGMSG_REQBODY;
@@ -1163,8 +1255,11 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                         if (hostpos > 0) {
                             int k = toffset+1;
                             int i = 0;
-                            while(k < hostpos-1 && k < len && line[k] != '\0') {
+                            while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
                                 tbuff[i++] = line[k++];
+                            }
+                            if (k < hostpos-1 && k < len && line[k] != '\0') {
+                                set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
                             }
                             tbuff[i] = '\0';
                             l->log_modsec_msg = mscl_stradd(l, tbuff, i);
@@ -1180,8 +1275,11 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                             if (hostpos > 0) {
                                 int k = toffset+1;
                                 int i = 0;
-                                while(k < hostpos-1 && k < len && line[k] != '\0') {
+                                while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
                                     tbuff[i++] = line[k++];
+                                }
+                                if (k < hostpos-1 && k < len && line[k] != '\0') {
+                                    set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
                                 }
                                 tbuff[i] = '\0';
                                 l->log_modsec_msg = mscl_stradd(l, tbuff, i);
@@ -1200,8 +1298,11 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
                 int ci = 0;
                 int k = matches[0] + matches[1];
                 char client[50];
-                while(k < len && line[k] != ',') {
+                while(k < len && line[k] != ',' && ci < sizeof(client)-1) {
                     client[ci++] = line[k++];
+                }
+                if (k < len && line[k] != ',') {
+                    set_error(l, "client field is truncated!", matches[0] + matches[1], k);
                 }
                 client[ci] = '\0';
                 l->log_client = mscl_stradd(l, client, ci);
