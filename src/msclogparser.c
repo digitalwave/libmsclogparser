@@ -1130,7 +1130,7 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
         else {
             l->entry_is_broken = 1;
             char err[50] = {0};
-            snprintf(err, sizeof(err), "Can't find field: %s!", fields[fi]);
+            snprintf(err, sizeof(err), "Can't find field: %.19s!", fields[fi]);
             set_error(l, err, *pos, l->log_entry_raw_length);
             return;
         }
