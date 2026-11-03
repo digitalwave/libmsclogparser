@@ -973,7 +973,7 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
     };
 
     int          fi = 0;      // field index
-    char       *tmp = NULL;   // temporary pointer
+    char     **tmp = NULL;   // the logdata field to fill
     size_t   maxlen = 0;      // max length of token
     size_t  lastpos = matches[0] + matches[1];     
     int           k;          // pos in line
@@ -991,19 +991,19 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
             // prev. position in first case is where we found the ' [id ' pattern
             switch (line[k]) {
                 case 'i':
-                    tmp = l->log_rule_id;
+                    tmp = &l->log_rule_id;
                     strcpy(tfield, "[id]");
                     maxlen = 20;
                     break;
 
                 case 'f':
-                    tmp = l->log_rule_file;
+                    tmp = &l->log_rule_file;
                     strcpy(tfield, "[file]");
                     maxlen = 256;
                     break;
 
                 case 'l':
-                    tmp = l->log_rule_line;
+                    tmp = &l->log_rule_line;
                     strcpy(tfield, "[line]");
                     maxlen = 20;
                     break;
@@ -1023,7 +1023,7 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
             if (maxlen > 0) {
                 size_t errpos[2] = { 0, 0 };
                 int is_broken = 0;
-                copy_str_from_line(l, line, &tmp, k, matches[0], maxlen, &errpos, &is_broken);
+                copy_str_from_line(l, line, tmp, k, matches[0], maxlen, &errpos, &is_broken);
                 if (is_broken == 1) {
                     char err[50];
                     snprintf(err, sizeof(err), "Field %s is truncated!", tfield);
@@ -1053,12 +1053,12 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
     mcnt = find_pattern(line, lastpos-1, l->log_entry_raw_length, "]", 1, &matches, MATCH_FIRST);
     if (mcnt == 1) {
         k = prevstart;
-        tmp = l->log_rule_line;
+        tmp = &l->log_rule_line;
         maxlen = 20;
 
         size_t errpos[2] = { 0, 0 };
         int is_broken = 0;
-        copy_str_from_line(l, line, &tmp, k, matches[0]+1, maxlen, &errpos, &is_broken);
+        copy_str_from_line(l, line, tmp, k, matches[0]+1, maxlen, &errpos, &is_broken);
         if (is_broken == 1) {
             set_error(l, "Field [line] is truncated!", errpos[0], errpos[1]);
         }
