@@ -361,6 +361,26 @@ static void test_truncated_tail(void) {
     free(ok3);
 }
 
+// partial matches of a field name must not be searched again and again:
+// a line of this length took tens of seconds with the quadratic search
+static void test_partial_field_runs(void) {
+    logdata l;
+    size_t n = 320000;   // ' [l' * n = 960 KB
+    char *run = malloc(n * 3 + 1), *p = run;
+    for (size_t i = 0; i < n; i++) { memcpy(p, " [l", 3); p += 3; }
+    *p = '\0';
+
+    char *s = cat(AP_HEAD, "Warning. x [file \"/x\"]", run, AP_TAIL, NULL);
+    clock_t start = clock();
+    parse_line("partial field run", s, LOG_TYPE_APACHE, &l);
+    double secs = (double)(clock() - start) / CLOCKS_PER_SEC;
+    CHECK(secs < 3.0, "partial field run: %.2f s", secs);
+    CHECKV(l.entry_is_modsecline == 1, "partial field run: not a modsecurity line");
+    CHECKV(strcmp(l.log_unique_id, "Zc3-aHFzNBf8HIsK4ZQ") == 0, "partial field run: unique_id '%s'", l.log_unique_id);
+    free(s);
+    free(run);
+}
+
 int main(void) {
     test_regular_lines();
     test_long_message();
@@ -369,6 +389,7 @@ int main(void) {
     test_long_rule_error();
     test_short_values();
     test_truncated_tail();
+    test_partial_field_runs();
 
     return test_result(DEFAULT_SIZES ? "test_bounds" : "test_bounds (tiny buffers)");
 }
