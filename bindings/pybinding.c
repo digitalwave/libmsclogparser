@@ -56,6 +56,17 @@ modsecurity@digitalwave.hu
 
 static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log.";
 
+// append a new reference to the list, and release it
+// returns -1 (with the exception set) if item is NULL or the append fails
+static int list_append_new(PyObject *list, PyObject *item) {
+    if (item == NULL) {
+        return -1;
+    }
+    int rc = PyList_Append(list, item);
+    Py_DECREF(item);
+    return rc;
+}
+
 static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
     char       *line = NULL;
     size_t      len;
@@ -72,15 +83,20 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
     parse(line, len, ltype, &l);
 
     PyObject *tags = PyList_New(0);
-
-    for(size_t i = 0; i < l.log_rule_tags_cnt; i++) {
-        PyList_Append(tags, Py_BuildValue("s", l.log_rule_tags));
-        l.log_rule_tags += strlen(l.log_rule_tags) + 1;
-    }
-
-
     PyObject *errors = PyList_New(0);
     PyObject *errorspos = PyList_New(0);
+    PyObject *rv = NULL;
+
+    if (tags == NULL || errors == NULL || errorspos == NULL) {
+        goto cleanup;
+    }
+
+    for(size_t i = 0; i < l.log_rule_tags_cnt; i++) {
+        if (list_append_new(tags, Py_BuildValue("s", l.log_rule_tags)) < 0) {
+            goto cleanup;
+        }
+        l.log_rule_tags += strlen(l.log_rule_tags) + 1;
+    }
 
     if (l.log_entry_errors_cnt > 0) {
         // reset errpool ptr
@@ -88,12 +104,14 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         msclogerr logerr;
         for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
-            PyList_Append(errors, Py_BuildValue("s", logerr.errmsg));
-            PyList_Append(errorspos, Py_BuildValue("[k,k]", *logerr.startpos, *logerr.endpos));
+            if (list_append_new(errors, Py_BuildValue("s", logerr.errmsg)) < 0 ||
+                list_append_new(errorspos, Py_BuildValue("[k,k]", *logerr.startpos, *logerr.endpos)) < 0) {
+                goto cleanup;
+            }
         }
     }
 
-    PyObject * rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:i,s:O,s:s,s:s,s:s,s:s,s:i,s:O,s:O}",
+    rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:i,s:O,s:s,s:s,s:s,s:s,s:i,s:O,s:O}",
         "entry_is_modsecline",        l.entry_is_modsecline,
         "entry_is_broken",            l.entry_is_broken,
         "log_entry_raw_length",       l.log_entry_raw_length,
@@ -129,6 +147,12 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         "log_entry_errors",           errors,
         "log_entry_errors_pos",       errorspos
     );
+
+cleanup:
+    // Py_BuildValue("O") and PyList_Append() take their own references
+    Py_XDECREF(tags);
+    Py_XDECREF(errors);
+    Py_XDECREF(errorspos);
 
     return rv;
 }
