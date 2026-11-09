@@ -261,6 +261,9 @@ static int find_pattern(char * line, size_t offset, size_t maxlen, const char *p
     // find first occurrence of pattern or subpattern (if minlen LT pattlen)
     // if we do not find it, return to caller
     const char *p = strstr(line+offset, pattern);
+    // once the whole pattern isn't found, it can't be found from a later offset
+    // either: without this flag a long run of partial matches costs O(n^2)
+    int pattgone = (p == NULL);
     if (p == NULL) {
         if (minlen < pattlen) {
             p = strstr(line+offset, minpatt);
@@ -332,8 +335,9 @@ static int find_pattern(char * line, size_t offset, size_t maxlen, const char *p
                     bestmatchlen = 0;
                 }
                 // find new offset
-                p = strstr(line+offset, pattern);
+                p = pattgone ? NULL : strstr(line+offset, pattern);
                 if (p == NULL) {
+                    pattgone = 1;
                     p = strstr(line+offset, minpatt);
                     if (p == NULL && minlen < pattlen) {
                         offset = maxlen;
