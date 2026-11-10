@@ -16,6 +16,8 @@ run with tiny buffers too, see tests/test_bounds_tiny.c.
 
 #define AP_HEAD "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] [client 192.0.2.10:1234] ModSecurity: "
 #define AP_TAIL " [hostname \"www.example.test\"] [uri \"/index.php\"] [unique_id \"Zc3-aHFzNBf8HIsK4ZQ\"]"
+#define AP_NOSPACE "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] [client 192.0.2.10:1234] ModSecurity:"
+#define NGX_NOSPACE "2022/12/20 17:04:13 [info] 1#1: *1 ModSecurity:"
 #define NGX_HEAD "2022/12/20 17:04:13 [info] 1#1: *1 ModSecurity: "
 #define NGX_TAIL " [hostname \"192.0.2.1\"] [uri \"/index.php\"] [unique_id \"168142074224.426959\"], client: 192.0.2.10, server: www.example.test, request: \"GET / HTTP/1.1\", host: \"www.example.test\""
 #define FIELDS " [file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"92\"] [id \"942100\"] [msg \"SQL Injection Attack\"] [severity \"CRITICAL\"]"
@@ -381,6 +383,263 @@ static void test_partial_field_runs(void) {
     free(run);
 }
 
+#define CHECK_SAME(name, got, want) CHECKV(strcmp(got, want) == 0, "%s: changed to '%s'", name, got)
+
+// is every byte sequence of the string a complete UTF-8 character?
+static int is_utf8(const char *str) {
+    const unsigned char *s = (const unsigned char *)str;
+    while (*s != '\0') {
+        int more = (*s < 0x80) ? 0 : ((*s & 0xE0) == 0xC0) ? 1 : ((*s & 0xF0) == 0xE0) ? 2 : ((*s & 0xF8) == 0xF0) ? 3 : -1;
+        if (more < 0) return 0;
+        s++;
+        for (; more > 0; more--, s++) {
+            if ((*s & 0xC0) != 0x80) return 0;
+        }
+    }
+    return 1;
+}
+
+static void check_utf8(const char *name, const char *src, loglinetype lt, logdata *l) {
+    parse_line(name, src, lt, l);
+    for (int f = 0; f <= LOGFIELD_LOG_SERVER; f++) {
+        if (f == LOGFIELD_LOG_DATE_TIMESTAMP || f == LOGFIELD_LOG_RULE_TAGS) continue;
+        CHECK(is_utf8(l->fields[f]), "%s: field %d is cut in a character", name, f);
+    }
+    const char *t = l->log_rule_tags;
+    for (size_t i = 0; i < l->log_rule_tags_cnt; i++) {
+        CHECK(is_utf8(t), "%s: tag %zu is cut in a character", name, i);
+        t += strlen(t) + 1;
+    }
+}
+
+// n bytes of padding, then the character until the value is over the limit
+static char * utf8_value(size_t pad, const char *ch, size_t limit) {
+    size_t width = strlen(ch), count = limit / width + 4;
+    char *v = malloc(pad + count * width + 1);
+    memset(v, 'x', pad);
+    for (size_t i = 0; i < count; i++) memcpy(v + pad + i * width, ch, width);
+    v[pad + count * width] = '\0';
+    return v;
+}
+
+// a limit must not cut a multibyte character, that makes the field invalid
+static void test_cut_utf8(void) {
+    static const char * const chars[] = { "\xc3\xa9", "\xe2\x82\xac", "\xf0\x9f\x98\x80" };
+    static const struct { const char *name; size_t limit; int field; } fields[] = {
+        { "file", 256, LOGFIELD_LOG_RULE_FILE }, { "msg", 512, LOGFIELD_LOG_RULE_MSG },
+        { "data", 1024, LOGFIELD_LOG_RULE_DATA }, { "tag", 50, LOGFIELD_LOG_RULE_TAGS }
+    };
+    logdata l;
+
+    for (size_t c = 0; c < sizeof(chars) / sizeof(chars[0]); c++) {
+        // a fixed offset of the parser falls in the character
+        char *h = cat(AP_HEAD, "Warning.", chars[c], " rest of it", FIELDS, AP_TAIL, NULL);
+        check_utf8("offset", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("offset", l.log_modsec_reason, " rest of it");
+        free(h);
+        h = cat(AP_HEAD, "Warning.", chars[c], " x at ARGS:a.", FIELDS, AP_TAIL, NULL);
+        check_utf8("at offset", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("at offset", l.log_modsec_reason, " x");
+        free(h);
+        h = cat(AP_HEAD, "Warning.", chars[c], " x \"q\" at ARGS:a.", FIELDS, AP_TAIL, NULL);
+        check_utf8("quote start", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("quote start", l.log_modsec_reason, " x");
+        free(h);
+        // the target is cut 11 bytes before the end of the message
+        h = cat(AP_HEAD, "Warning. Pattern match \"a\" against \"abc", chars[c], "zzzzzzzzz.", FIELDS, AP_TAIL, NULL);
+        check_utf8("against tail", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("against tail", l.log_modsec_target_name, "abc");
+        free(h);
+        // a tail slice ends one byte before the quote, or before the end of the message
+        h = cat(AP_HEAD, "Warning. x", chars[c], "\"q\" at ARGS:a.", FIELDS, AP_TAIL, NULL);
+        check_utf8("quote offset", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("quote offset", l.log_modsec_reason, "x");
+        free(h);
+        h = cat(NGX_HEAD, "Warning. x", chars[c], FIELDS, NGX_TAIL, NULL);
+        check_utf8("nginx tail slice", h, LOG_TYPE_NGINX, &l);
+        CHECK_SAME("nginx tail slice", l.log_modsec_reason, "x");
+        free(h);
+        // the fixed offsets at the start of the other messages
+        h = cat(NGX_NOSPACE, chars[c], " Warning. x.", FIELDS, NGX_TAIL, NULL);
+        check_utf8("message start", h, LOG_TYPE_NGINX, &l);
+        CHECK_SAME("message start", l.log_modsec_msg, " Warning. x.");
+        free(h);
+        h = cat(AP_HEAD, "Rule 7f12340000 [id \"1\"][file \"/x\"][line \"1\"]", " ", chars[c], "- Execution error ", AP_TAIL, NULL);
+        check_utf8("rule error start", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("rule error start", l.log_modsec_process_error, "- Execution error");
+        free(h);
+        h = cat(AP_NOSPACE, chars[c], " Rule 7f [id \"1\"][file \"/x\"][line \"1\"] - x ", AP_TAIL, NULL);
+        check_utf8("rule message start", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("rule message start", l.log_modsec_msg, " Rule 7f");
+        free(h);
+        h = cat(AP_NOSPACE, chars[c], " Request body: x", AP_TAIL, NULL);
+        check_utf8("request body start", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("request body start", l.log_modsec_msg, " Request body: x");
+        free(h);
+        h = cat(AP_NOSPACE, chars[c], " Audit log: x", AP_TAIL, NULL);
+        check_utf8("audit log start", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("audit log start", l.log_modsec_msg, " Audit log: x");
+        free(h);
+        // ... and the fixed offset before the tail
+        h = cat(AP_HEAD, "Audit log: x. ", chars[c], "[hostname \"h\"] [uri \"/\"] [unique_id \"u\"]", NULL);
+        check_utf8("audit log end", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("audit log end", l.log_modsec_msg, "Audit log: x. ");
+        free(h);
+        h = cat(AP_HEAD, "Request body: x. ", chars[c], "[hostname \"h\"] [uri \"/\"] [unique_id \"u\"]", NULL);
+        check_utf8("request body end", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("request body end", l.log_modsec_msg, "Request body: x. ");
+        free(h);
+        h = cat(AP_HEAD, "Rule 7f12340000 ", chars[c], "[id \"1\"][file \"/x\"][line \"1\"] - x ", AP_TAIL, NULL);
+        check_utf8("rule message end", h, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("rule message end", l.log_modsec_msg, "Rule 7f12340000 ");
+        free(h);
+        h = cat(NGX_HEAD, "Access ", chars[c], "denied with code 403 (phase 2). Matched x", FIELDS, NGX_TAIL, NULL);
+        check_utf8("nginx access offset", h, LOG_TYPE_NGINX, &l);
+        CHECK_SAME("nginx access offset", l.log_modsec_reason, "denied with code 403 (phase 2). Matched ");
+        free(h);
+
+        for (size_t pad = 0; pad < 4; pad++) {
+            for (size_t f = 0; f < sizeof(fields) / sizeof(fields[0]); f++) {
+                char *v = utf8_value(pad, chars[c], fields[f].limit);
+                // only a line with a [file] field reaches the copy of the other fields
+                const char *file = strcmp(fields[f].name, "file") != 0 ? " [file \"/x\"]" : "";
+                char *s = cat(AP_HEAD, "Warning. x.", file, " [", fields[f].name, " \"", v, "\"]", AP_TAIL, NULL);
+                check_utf8(fields[f].name, s, LOG_TYPE_APACHE, &l);
+                const char *got = fields[f].field == LOGFIELD_LOG_RULE_TAGS ? l.log_rule_tags : l.fields[fields[f].field];
+                CHECKV(got[0] != '\0', "%s: the value is not stored", fields[f].name);
+                free(s);
+                free(v);
+            }
+            char *v = utf8_value(pad, chars[c], 4096);
+            char *s = cat(AP_HEAD, "Warning. x", v, ".", FIELDS, AP_TAIL, NULL);
+            check_utf8("message", s, LOG_TYPE_APACHE, &l);
+            free(s);
+            s = cat(AP_HEAD, "Rule 7f12340000 [id \"1\"][file \"/x\"][line \"1\"] - ", v, " ", AP_TAIL, NULL);
+            check_utf8("rule error", s, LOG_TYPE_APACHE, &l);
+            CHECKV(l.log_modsec_process_error[0] != '\0', "rule error: the value is not stored");
+            free(s);
+            free(v);
+
+            v = utf8_value(pad, chars[c], 2048);
+            s = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"", v, "\"] [unique_id \"u\"]", NULL);
+            check_utf8("uri", s, LOG_TYPE_APACHE, &l);
+            free(s);
+            s = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"", v, "\"] [uri \"/\"] [unique_id \"u\"]", NULL);
+            check_utf8("hostname", s, LOG_TYPE_APACHE, &l);
+            free(s);
+            s = cat(NGX_HEAD, "Warning. x.", FIELDS, " [hostname \"\"] [uri \"/\"] [unique_id \"u\"], client: 192.0.2.10, server: s, request: \"GET / HTTP/1.1\", host: \"", v, "\"", NULL);
+            check_utf8("nginx host", s, LOG_TYPE_NGINX, &l);
+            CHECKV(l.log_hostname[0] != '\0', "nginx host: the value is not stored");
+            free(s);
+            s = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"/\"] [unique_id \"", v, "\"]", NULL);
+            check_utf8("unique_id", s, LOG_TYPE_APACHE, &l);
+            free(s);
+            free(v);
+
+            v = utf8_value(pad, chars[c], 49);
+            s = cat("[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] [client ", v, "] ModSecurity: Warning. x.", FIELDS, AP_TAIL, NULL);
+            check_utf8("client", s, LOG_TYPE_APACHE, &l);
+            free(s);
+            free(v);
+        }
+    }
+}
+
+// a value that ends in the closing delimiter after the cut character is dropped
+// is still a cut value
+static void test_cut_before_delimiter(void) {
+    logdata l;
+    char *x = rep('x', 509);
+    char *s = cat(AP_HEAD, "Warning. x. [file \"/x\"] [msg \"", x, "\"]\xe2\x82\xac\"]", AP_TAIL, NULL);
+    char *want = cat(x, "\"]", NULL);
+    parse_line("cut before delimiter", s, LOG_TYPE_APACHE, &l);
+    CHECKV(strcmp(l.log_rule_msg, want) == 0, "cut before delimiter: msg '%s'", l.log_rule_msg);
+    CHECKV(has_error(&l, "Field [msg] is truncated!"), "cut before delimiter: no error");
+    free(s);
+    free(want);
+    free(x);
+
+    x = rep('x', 2045);
+    s = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"", x, "\"]\xe2\x82\xac\"] [unique_id \"u\"]", NULL);
+    want = cat(x, "\"]", NULL);
+    parse_line("cut uri before delimiter", s, LOG_TYPE_APACHE, &l);
+    CHECKV(strcmp(l.log_uri, want) == 0, "cut uri before delimiter: uri '%s'", l.log_uri);
+    CHECKV(has_error(&l, "[uri] field is truncated!"), "cut uri before delimiter: no error");
+    free(s);
+    free(want);
+    free(x);
+}
+
+// a value that was not cut stays byte-identical, also when it isn't valid UTF-8
+static void test_uncut_invalid_bytes(void) {
+    static const char * const values[] = { "\xa9" "x caf\xe9", "\xe9", "\xa9", "\xc3", "caf\xe2\x82" };
+    logdata l;
+
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+        const char *v = values[i];
+        char *s = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"/caf", v, "\"] [unique_id \"u\"]", NULL);
+        char *uri = cat("/caf", v, NULL);
+        parse_line("uncut uri end", s, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("uncut uri end", l.log_uri, uri);
+        free(uri);
+        free(s);
+
+        s = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"", v, "\"] [unique_id \"u\"]", NULL);
+        parse_line("uncut uri", s, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("uncut uri", l.log_uri, v);
+        free(s);
+
+        s = cat(AP_HEAD, "Warning. x. [file \"/x\"] [data \"", v, "\"]", AP_TAIL, NULL);
+        parse_line("uncut data", s, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("uncut data", l.log_rule_data, v);
+        free(s);
+
+        // message slices: at the fixed offset and to the end of the message
+        char *msg = cat("Warning. ", v, ".", NULL);
+        s = cat(AP_HEAD, msg, FIELDS, AP_TAIL, NULL);
+        parse_line("uncut slice", s, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("uncut slice", l.log_modsec_reason, v);
+        free(s);
+        s = cat(NGX_HEAD, msg, FIELDS, NGX_TAIL, NULL);
+        parse_line("uncut nginx slice", s, LOG_TYPE_NGINX, &l);
+        CHECK_SAME("uncut nginx slice", l.log_modsec_reason, v);
+        free(s);
+        free(msg);
+
+        // up to the fixed " at " offset
+        s = cat(AP_HEAD, "Warning. ", v, " at ARGS:", v, ".", FIELDS, AP_TAIL, NULL);
+        parse_line("uncut at slice", s, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("uncut at slice", l.log_modsec_reason, v);
+        CHECK_SAME("uncut at slice target", l.log_modsec_target_name + strlen("ARGS:"), v);
+        free(s);
+
+        s = cat(NGX_HEAD, "Warning. Matched \"Operator `Rx' with parameter `x' against variable `ARGS:q' (Value: `", v, "' )", FIELDS, NGX_TAIL, NULL);
+        parse_line("uncut target value", s, LOG_TYPE_NGINX, &l);
+        CHECK_SAME("uncut target value", l.log_modsec_target_value, v);
+        free(s);
+    }
+
+    // the limit of copy_str_from_line() stops at the closing '"]', the value isn't cut
+    for (size_t len = 1022; len <= 1024; len++) {
+        char *v = rep('x', len);
+        v[len - 1] = '\xe9';
+        char *s = cat(AP_HEAD, "Warning. x. [file \"/x\"] [data \"", v, "\"]", AP_TAIL, NULL);
+        parse_line("uncut data at limit", s, LOG_TYPE_APACHE, &l);
+        CHECK_SAME("uncut data at limit", l.log_rule_data, v);
+        free(s);
+        free(v);
+    }
+
+    // the [uri] buffer is full before the closing '"]', the value isn't cut
+    char *v = rep('x', 2048);
+    v[2047] = '\xe9';
+    char *s = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"", v, "\"] [unique_id \"u\"]", NULL);
+    parse_line("uncut uri at limit", s, LOG_TYPE_APACHE, &l);
+    CHECK_SAME("uncut uri at limit", l.log_uri, v);
+    free(s);
+    free(v);
+}
+
 int main(void) {
     test_regular_lines();
     test_long_message();
@@ -390,6 +649,9 @@ int main(void) {
     test_short_values();
     test_truncated_tail();
     test_partial_field_runs();
+    test_cut_utf8();
+    test_cut_before_delimiter();
+    test_uncut_invalid_bytes();
 
     return test_result(DEFAULT_SIZES ? "test_bounds" : "test_bounds (tiny buffers)");
 }
