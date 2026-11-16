@@ -372,20 +372,40 @@ static void test_truncated_tail(void) {
 // partial matches of a field name must not be searched again and again (a
 // 960 KB line took tens of seconds with the quadratic search); a line is
 // shorter than MSCLOG_LINE_BUFF_SIZE now, so this is the longest run that fits
+// ASan's strstr() interceptor checks the whole string at every call, that makes
+// the search quadratic, so the time isn't checked under ASan
+#if defined(__SANITIZE_ADDRESS__)
+#define MSCL_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define MSCL_ASAN 1
+#endif
+#endif
+
 static void test_partial_field_runs(void) {
     logdata l;
-    size_t n = 2500;     // ' [l' * n = 7.5 KB
+    // parse() doesn't take a line of 8 KB or longer, so the long run is given to
+    // parse_copy() directly, on a writable, terminated copy: with the quadratic
+    // re-search it took minutes, now it's linear
+    size_t n = 100000;     // ' [l' * n = 300 KB
     char *run = malloc(n * 3 + 1), *p = run;
     for (size_t i = 0; i < n; i++) { memcpy(p, " [l", 3); p += 3; }
     *p = '\0';
 
     char *s = cat(AP_HEAD, "Warning. x [file \"/x\"]", run, AP_TAIL, NULL);
+    memset(&l, '\0', sizeof(logdata));
     clock_t start = clock();
-    parse_line("partial field run", s, LOG_TYPE_APACHE, &l);
+    parse_copy(s, strlen(s), LOG_TYPE_APACHE, &l);
     double secs = (double)(clock() - start) / CLOCKS_PER_SEC;
+#ifndef MSCL_ASAN
     CHECK(secs < 3.0, "partial field run: %.2f s", secs);
-    CHECKV(l.entry_is_modsecline == 1, "partial field run: not a modsecurity line");
+#else
+    (void)secs;
+#endif
+    CHECK(l.entry_is_modsecline == 1, "partial field run: not a modsecurity line");
     CHECKV(strcmp(l.log_unique_id, "Zc3-aHFzNBf8HIsK4ZQ") == 0, "partial field run: unique_id '%s'", l.log_unique_id);
+    check_invariants("partial field run", &l);
+    check_errors("partial field run", &l);
     free(s);
     free(run);
 }
