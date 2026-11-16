@@ -114,8 +114,6 @@ PHP_FUNCTION(parse)
     }
 
     logdata l;
-    memset(&l, '\0', sizeof(logdata));
-
     parse(line, (size_t)len, (loglinetype)ltype, &l);
     if (lenerr) {
         l.entry_is_broken = 1;

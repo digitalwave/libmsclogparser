@@ -638,7 +638,7 @@ where the arguments:
 
 Note, that the last argument (logdata) is necessary only in C. If you use any kind of bindings, you don't need to care of that.
 
-`parse()` reads only the first `len` bytes of the line, and doesn't modify it. The line doesn't have to be terminated with `'\0'`, so it can be a part of a bigger buffer, eg. of a whole log file read into memory. A line ending (`\n` or `\r\n`) at the end of the line is ignored.
+`parse()` reads only the first `len` bytes of the line, and doesn't modify it. The line doesn't have to be terminated with `'\0'`, so it can be a part of a bigger buffer, eg. of a whole log file read into memory. A line ending (`\n` or `\r\n`) at the end of the line is ignored. The `logdata` structure doesn't have to be cleared before the call, `parse()` initializes it, so the same structure can be reused for every line.
 
 To see an example, you should check the examples directory. Here is a sample:
 ```C
@@ -647,8 +647,6 @@ To see an example, you should check the examples directory. Here is a sample:
     while (fgets (line, 4095, fp) != NULL) {
         len = strlen(line);
         if (len > 0) {
-            memset(&l, '\0', sizeof(logdata));
-
             parse(line, len, t, &l);
 
             if (l.is_modsecline == 1) {

@@ -46,6 +46,7 @@ For more information, please contact Digitalwave at this address:
 modsecurity@digitalwave.hu
 */
 
+#include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -1504,7 +1505,10 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 // line[len]. It works on a copy in l->linebuf, so the caller's line isn't
 // modified, and it doesn't have to be terminated. The values are stored in the
 // data pool, none of them points to the copy.
+// The counters, flags and field pointers are cleared first, so the caller can
+// reuse the same logdata for every line without clearing it.
 int parse (const char * line, size_t len, loglinetype t, logdata * l) {
+    memset(l, '\0', offsetof(logdata, datapool));
     if (len >= sizeof(l->linebuf)) {
         // too long: parse an empty line to initialize the fields, and report it
         l->linebuf[0] = '\0';

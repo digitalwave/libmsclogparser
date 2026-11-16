@@ -128,8 +128,6 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         len = linelen;
     }
 
-    memset(&l, '\0', sizeof(logdata));
-
     parse(line, (size_t)len, (loglinetype)ltype, &l);
 
     PyObject *tags = PyList_New(0);

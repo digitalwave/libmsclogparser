@@ -7,6 +7,8 @@ v3.0.0 - 2026-11-16
     strings in the bindings, and crashed PHP with opcache)
   * A line of 8192 (MSCLOG_LINE_BUFF_SIZE) bytes or longer isn't
     parsed, it's reported as an error
+  * parse() initializes the logdata: the caller doesn't have to
+    clear it before every line, the bindings don't clear it anymore
   * Fix: don't store a part of a UTF-8 character when a field is
     cut, and don't trim a value that isn't cut
   * Fix: quadratic re-search in find_pattern() on lines with many

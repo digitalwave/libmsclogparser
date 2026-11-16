@@ -697,6 +697,56 @@ static void test_line_not_modified(void) {
     free(s);
 }
 
+// parse() initializes the logdata: the same structure can be reused for every
+// line without clearing it, the counters and flags don't keep the values of the
+// previous line; the result is the same as with a cleared structure
+static void check_same_result(const char *name, logdata *l, logdata *ref) {
+    CHECK(l->entry_is_modsecline == ref->entry_is_modsecline && l->entry_is_broken == ref->entry_is_broken,
+          "%s: modsecline %d/%d broken %d/%d", name, l->entry_is_modsecline, ref->entry_is_modsecline,
+          l->entry_is_broken, ref->entry_is_broken);
+    CHECK(l->log_entry_errors_cnt == ref->log_entry_errors_cnt, "%s: errors %d/%d", name,
+          l->log_entry_errors_cnt, ref->log_entry_errors_cnt);
+    CHECK(l->log_rule_tags_cnt == ref->log_rule_tags_cnt, "%s: tags %zu/%zu", name,
+          l->log_rule_tags_cnt, ref->log_rule_tags_cnt);
+    CHECK(l->log_entry_raw_length == ref->log_entry_raw_length && l->log_modsec_msg_length == ref->log_modsec_msg_length
+          && l->log_entry_class == ref->log_entry_class && l->log_date_timestamp == ref->log_date_timestamp,
+          "%s: length, class or timestamp differs", name);
+    for (int f = 0; f <= LOGFIELD_LOG_SERVER; f++) {
+        if (f == LOGFIELD_LOG_DATE_TIMESTAMP) continue;
+        CHECK(l->fields[f] != NULL && strcmp(l->fields[f], ref->fields[f]) == 0, "%s: field %d differs", name, f);
+    }
+    check_invariants(name, l);
+    check_errors(name, l);
+}
+
+static void test_reuse_logdata(void) {
+    logdata l, ref;
+    // garbage instead of zeros, like an uninitialized structure
+    memset(&l, 0xa5, sizeof(logdata));
+
+    char *good = cat(AP_HEAD, "Warning. x.", FIELDS, " [tag \"t1\"] [tag \"t2\"]", AP_TAIL, NULL);
+    char *broken = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"/x", NULL);
+    char *toolong = rep('x', MSCLOG_LINE_BUFF_SIZE);
+    struct { const char *name; const char *line; size_t len; } lines[] = {
+        { "reuse broken",   broken,                   strlen(broken) },
+        { "reuse good",     good,                     strlen(good) },
+        { "reuse too long", toolong,                  MSCLOG_LINE_BUFF_SIZE },
+        { "reuse other",    "not a modsecurity line", 22 },
+    };
+
+    for (int i = 0; i < 3; i++) {
+        for (size_t n = 0; n < sizeof(lines) / sizeof(lines[0]); n++) {
+            memset(&ref, '\0', sizeof(logdata));
+            parse(lines[n].line, lines[n].len, LOG_TYPE_APACHE, &ref);
+            parse(lines[n].line, lines[n].len, LOG_TYPE_APACHE, &l);
+            check_same_result(lines[n].name, &l, &ref);
+        }
+    }
+    free(good);
+    free(broken);
+    free(toolong);
+}
+
 // a line of MSCLOG_LINE_BUFF_SIZE bytes or longer isn't parsed, the fields are
 // empty, and it's reported; one byte shorter is parsed
 static void test_line_too_long(void) {
@@ -734,6 +784,7 @@ static void test_line_too_long(void) {
 int main(void) {
     test_line_not_modified();
     test_line_too_long();
+    test_reuse_logdata();
     test_regular_lines();
     test_long_message();
     test_many_tags();

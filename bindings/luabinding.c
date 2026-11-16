@@ -81,8 +81,6 @@ static int msclualogparser_parse (lua_State *L) {
     }
 
     logdata l;
-    memset(&l, '\0', sizeof(logdata));
-
     parse(line, len, ltype, &l);
     if (lenerr) {
         l.entry_is_broken = 1;

@@ -188,7 +188,8 @@ typedef char * logvalptr;
 void read_msclog_err(msclogpool *pool, msclogerr *err);
 // parses the first len bytes of line; line doesn't have to be NUL terminated,
 // and it isn't modified; a line of MSCLOG_LINE_BUFF_SIZE bytes or longer isn't
-// parsed, it's an error
+// parsed, it's an error; l doesn't have to be cleared before the call, it can be
+// reused for every line
 int parse (const char * line, size_t len, loglinetype t, logdata * l);
 
 #endif
