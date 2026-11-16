@@ -817,6 +817,8 @@ To compile the code, just download the source and type as regular user:
 
 You can set the target directory given `--prefix=/path/to`, and set other options.
 
+The generated files (`configure`, `Makefile.in`, ...) are in the repository, so `autotools` aren't needed for the build, and `make` doesn't regenerate them. If you change `configure.ac` or a `Makefile.am`, run `autoreconf -fi`, or configure with `--enable-maintainer-mode`.
+
 To compile the bindings, these options are avaliable:
 ```bash
 --enable-python \

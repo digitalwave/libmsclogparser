@@ -22,6 +22,11 @@ AM_PROG_AR
 # AC_PROG_RANLIB
 
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
+# the generated files (configure, Makefile.in, ...) are committed, and a git
+# checkout doesn't keep their mtimes: don't let make rerun the autotools (it
+# would need the same automake version), run autoreconf -fi after a change of
+# configure.ac or Makefile.am, or configure with --enable-maintainer-mode
+AM_MAINTAINER_MODE
 
 AC_CHECK_HEADER([string.h], [], [AC_MSG_ERROR([unable to find string.h])])
 AC_CHECK_HEADER([stdlib.h], [], [AC_MSG_ERROR([unable to find stdlib.h])])

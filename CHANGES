@@ -31,6 +31,9 @@ v3.0.0 - 2026-11-16
   * Python and Ruby test scripts pass the length in bytes
   * pkg-config file: the version and the paths come from configure
     (it said 0.3.0, and had a fixed libdir)
+  * Build: make doesn't rerun the autotools (AM_MAINTAINER_MODE), the
+    committed generated files are used; run autoreconf -fi after a
+    change of configure.ac or a Makefile.am
   * ABI change: logdata has a new field, the SONAME is
     libmsclogparser.so.3, rebuild the bindings and applications
 
