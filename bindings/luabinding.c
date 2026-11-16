@@ -88,7 +88,7 @@ static int msclualogparser_parse (lua_State *L) {
     logdata l;
     memset(&l, '\0', sizeof(logdata));
 
-    parse((char *)line, len, ltype, &l);
+    parse(line, len, ltype, &l);
 
     lua_newtable(L);
     int maintable = lua_gettop(L);

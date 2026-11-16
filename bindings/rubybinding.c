@@ -61,7 +61,7 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
     logdata l;
     memset(&l, '\0', sizeof(logdata));
 
-    parse((char *)line, len, ltype, &l);
+    parse(line, len, ltype, &l);
 
     VALUE result = rb_hash_new();
 
