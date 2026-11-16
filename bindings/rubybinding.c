@@ -59,7 +59,9 @@ modsecurity@digitalwave.hu
 
 static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE arg3) {
 
-    const char  *line  = StringValueCStr(arg1);
+    // a NUL character in the line is reported by parse(), like in the other
+    // bindings (StringValueCStr() would raise an ArgumentError for it)
+    const char  *line  = StringValuePtr(arg1);
     size_t       linelen = RSTRING_LEN(arg1);
     ssize_t      slen  = NUM2SSIZET(arg2);
     if (slen < 0) {

@@ -863,11 +863,52 @@ static void test_unknown_type(void) {
     free(s);
 }
 
+// a NUL character in the line: it isn't parsed, it's reported (a ModSecurity
+// line is marked as one); at the end it's removed like the line ending
+static void test_nul_in_line(void) {
+    logdata l;
+    char *s = cat(AP_HEAD, "Warning. x.", FIELDS, AP_TAIL, NULL);
+    size_t len = strlen(s);
+    size_t positions[] = { 0, 5, strlen(AP_HEAD) + 3, len - 1 };
+    for (int i = 0; i < 4; i++) {
+        char *b = malloc(len);
+        memcpy(b, s, len);
+        b[positions[i]] = '\0';
+        memset(&l, 0xa5, sizeof(logdata));
+        int rc = parse(b, len, LOG_TYPE_APACHE, &l);
+        if (positions[i] == len - 1) {
+            // the last byte: removed like a line ending, the line is parsed (and
+            // its tail is cut)
+            CHECK(rc == 0 && !has_error(&l, "The line contains a NUL character, it can't be parsed!"),
+                  "NUL at the end: rc=%d", rc);
+        }
+        else {
+            CHECK(rc == 1 && l.entry_is_broken == 1 && l.log_entry_errors_cnt == 1
+                  && has_error(&l, "The line contains a NUL character, it can't be parsed!"),
+                  "NUL at %zu: rc=%d broken=%d errors=%d", positions[i], rc, l.entry_is_broken, l.log_entry_errors_cnt);
+            // it's still a ModSecurity line, wherever the NUL is
+            CHECK(l.entry_is_modsecline == 1, "NUL at %zu: modsecline=%d", positions[i], l.entry_is_modsecline);
+            CHECK(l.log_entry_raw_length == len && l.log_rule_id[0] == '\0' && l.log_uri[0] == '\0',
+                  "NUL at %zu: length %zu id '%s'", positions[i], l.log_entry_raw_length, l.log_rule_id);
+            l.lineerrpool.currptr = l.lineerrpool.pool;
+            msclogerr err;
+            read_msclog_err(&l.lineerrpool, &err);
+            CHECK(*err.startpos == positions[i] && *err.endpos == len, "NUL at %zu: error positions %zu, %zu",
+                  positions[i], *err.startpos, *err.endpos);
+        }
+        check_invariants("NUL in line", &l);
+        check_errors("NUL in line", &l);
+        free(b);
+    }
+    free(s);
+}
+
 int main(void) {
     test_line_not_modified();
     test_line_too_long();
     test_reuse_logdata();
     test_unknown_type();
+    test_nul_in_line();
     test_regular_lines();
     test_long_message();
     test_many_tags();

@@ -119,10 +119,6 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
                      Py_TYPE(lineobj)->tp_name);
         return NULL;
     }
-    if (strlen(line) != (size_t)linelen) {
-        PyErr_SetString(PyExc_ValueError, "embedded null character");
-        return NULL;
-    }
 
     // a len bigger than the line would make parse() read after its end: the
     // line is parsed with its own length, and the error is reported

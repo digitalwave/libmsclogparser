@@ -23,6 +23,10 @@ v3.0.0 - 2026-11-16
   * Bindings: if len is bigger than the line, the whole line is
     parsed, and an error is added to log_entry_errors; a negative
     len raises an error
+  * A line with a NUL character (except at its end) isn't parsed,
+    it's reported as an error, like a too long line; the Python and
+    Ruby bindings don't raise an error for it anymore, so all four
+    bindings handle it the same way
   * parse() reports an unknown log type as an error, the bindings
     raise an error for it
   * Python binding: fix reference leaks, report the real argument

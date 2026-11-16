@@ -1653,6 +1653,17 @@ int parse (const char * line, size_t len, loglinetype t, logdata * l) {
         set_error(l, "The line is too long, it can't be parsed!", 0, len);
         return 1;
     }
+    // the parser works on a '\0' terminated string, it would stop at a '\0' in
+    // the line: such a line isn't parsed either, the same way as a too long one
+    const char *nul = memchr(line, '\0', len);
+    if (nul != NULL) {
+        l->linebuf[0] = '\0';
+        parse_copy(l->linebuf, 0, t, l);
+        l->log_entry_raw_length = len;
+        l->entry_is_modsecline = mscl_contains(line, len, " ModSecurity:", 13);
+        set_error(l, "The line contains a NUL character, it can't be parsed!", (size_t)(nul - line), len);
+        return 1;
+    }
 
     memcpy(l->linebuf, line, len);
     l->linebuf[len] = '\0';
