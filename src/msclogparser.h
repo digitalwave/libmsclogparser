@@ -92,6 +92,16 @@ typedef enum logmsgtype {
 #define MSCLOGPOOL_SIZE 8192
 #endif
 
+/*
+ * parse() copies the line to logdata.linebuf before parsing it, a line of
+ * MSCLOG_LINE_BUFF_SIZE bytes or longer isn't parsed. The buffer is embedded
+ * in logdata, so this value is part of the ABI too, it can't be overridden.
+ */
+#ifdef MSCLOG_LINE_BUFF_SIZE
+#error "MSCLOG_LINE_BUFF_SIZE is part of the ABI and can't be overridden"
+#endif
+#define MSCLOG_LINE_BUFF_SIZE 8192
+
 typedef struct msclogpool {
     char    pool[MSCLOGPOOL_SIZE];
     char    *currptr;
@@ -145,6 +155,7 @@ typedef struct logdata {
     char          * fields[LOGFIELD_LOG_SERVER+1];
     msclogpool      datapool;
     msclogpool      lineerrpool;
+    char            linebuf[MSCLOG_LINE_BUFF_SIZE];
 } logdata;
 
 #define log_date_iso               fields[LOGFIELD_LOG_DATE_ISO]
@@ -175,6 +186,9 @@ typedef struct logdata {
 typedef char * logvalptr;
 
 void read_msclog_err(msclogpool *pool, msclogerr *err);
-int parse (char * line, size_t len, loglinetype t, logdata * l);
+// parses the first len bytes of line; line doesn't have to be NUL terminated,
+// and it isn't modified; a line of MSCLOG_LINE_BUFF_SIZE bytes or longer isn't
+// parsed, it's an error
+int parse (const char * line, size_t len, loglinetype t, logdata * l);
 
 #endif

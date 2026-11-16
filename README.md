@@ -61,7 +61,7 @@ The purpose of this project is to analyze the "always present" log output of Mod
 
 The writing of the code was preceded by thorough research. The expectation was that a method that knew all log formats and could recognize and show truncated (or duplicated) fields produced during known procedures.
 
-Even though the code is written in C, but it does not use any dynamic memory handling. It also does not have any library dependecy (eg. PCRE/PCRE2). Therefore it's really fast and convenience to use it.
+Even though the code is written in C, but it does not use any dynamic memory handling: `parse()` copies the line to a buffer in the `logdata` structure (`linebuf`), so a line of `MSCLOG_LINE_BUFF_SIZE` (8192) bytes or longer can't be parsed, `parse()` reports an error for it. It also does not have any library dependecy (eg. PCRE/PCRE2). Therefore it's really fast and convenience to use it.
 
 ## Licensing
 
@@ -628,15 +628,17 @@ Type: `int`
 ### Methods
 Library contains these methods:
 ```C
-int parse(char *line, size_t len, loglinetype LT, logdata *l);
+int parse(const char *line, size_t len, loglinetype LT, logdata *l);
 ```
 where the arguments:
 * pointer to the line itself
-* lenght of the line
+* lenght of the line in bytes
 * type of the line, see [constants](#constants) above
 * a logdata [structure](#structure)
 
 Note, that the last argument (logdata) is necessary only in C. If you use any kind of bindings, you don't need to care of that.
+
+`parse()` reads only the first `len` bytes of the line, and doesn't modify it. The line doesn't have to be terminated with `'\0'`, so it can be a part of a bigger buffer, eg. of a whole log file read into memory. A line ending (`\n` or `\r\n`) at the end of the line is ignored.
 
 To see an example, you should check the examples directory. Here is a sample:
 ```C

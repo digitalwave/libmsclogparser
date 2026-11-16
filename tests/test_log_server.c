@@ -144,7 +144,7 @@ static const server_case cases[] = {
       .server = "", .modsecline = 0, .broken = -1 },
 };
 
-// the line of a case, malloc()-ed, with room for the '\0' parse() writes
+// the line of a case, malloc()-ed
 static char * build_line(const server_case *c) {
     const char *value = c->value ? c->value : "1";
     const char *hostname = c->hostname ? c->hostname : "www.example.test";

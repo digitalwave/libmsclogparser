@@ -1258,7 +1258,8 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
     return;
 }
 
-int parse (char * line, size_t len, loglinetype t, logdata * l) {
+// line is a copy of the caller's line, it can be modified
+static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
     size_t offset = 0;
     l->lineerrpool.currptr = l->lineerrpool.pool;
@@ -1497,4 +1498,24 @@ int parse (char * line, size_t len, loglinetype t, logdata * l) {
     }
 
     return 0;
+}
+
+// The parser needs a line terminated with '\0', and it writes the '\0' to
+// line[len]. It works on a copy in l->linebuf, so the caller's line isn't
+// modified, and it doesn't have to be terminated. The values are stored in the
+// data pool, none of them points to the copy.
+int parse (const char * line, size_t len, loglinetype t, logdata * l) {
+    if (len >= sizeof(l->linebuf)) {
+        // too long: parse an empty line to initialize the fields, and report it
+        l->linebuf[0] = '\0';
+        parse_copy(l->linebuf, 0, t, l);
+        l->log_entry_raw_length = len;
+        set_error(l, "The line is too long, it can't be parsed!", 0, len);
+        return 1;
+    }
+
+    memcpy(l->linebuf, line, len);
+    l->linebuf[len] = '\0';
+
+    return parse_copy(l->linebuf, len, t, l);
 }

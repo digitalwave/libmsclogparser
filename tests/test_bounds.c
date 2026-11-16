@@ -100,13 +100,19 @@ static void check_errors(const char *name, logdata *l) {
     }
 }
 
+// follows the line in the buffer: parse() must not read it, a read after the end
+// of the line finds fake fields instead of a '\0'
+#define GUARD "\"] [file \"/guard\"] [line \"9\"] [id \"9\"] [msg \"guard\"] [tag \"guard\"] [hostname \"guard\"] [uri \"/guard\"] [unique_id \"guard\"], client: 192.0.2.99, server: guard"
+
 static void parse_line(const char *name, const char *src, loglinetype lt, logdata *l) {
-    // exact size copy, parse() writes the terminating '\0'
-    size_t len = strlen(src);
-    char *line = malloc(len + 1);
-    memcpy(line, src, len + 1);
+    // the line isn't terminated, the guard follows it
+    size_t len = strlen(src), glen = strlen(GUARD);
+    char *line = malloc(len + glen);
+    memcpy(line, src, len);
+    memcpy(line + len, GUARD, glen);
     memset(l, '\0', sizeof(logdata));
     parse(line, len, lt, l);
+    CHECK(memcmp(line, src, len) == 0 && memcmp(line + len, GUARD, glen) == 0, "%s: the line is modified", name);
     check_invariants(name, l);
     check_errors(name, l);
     free(line);
@@ -141,7 +147,7 @@ static void test_regular_lines(void) {
 static void test_long_message(void) {
     logdata l;
     // the ModSecurity message (before ' [file ') is longer than MSCLOG_TBUFF_SIZE
-    size_t sizes[] = { 4100, 5000, 7000, 20000 };
+    size_t sizes[] = { 4100, 5000, 7000, 7500 };   // the line has to be shorter than MSCLOG_LINE_BUFF_SIZE
     for (size_t i = 0; i < sizeof(sizes)/sizeof(sizes[0]); i++) {
         char *v = rep('A', sizes[i]);
         char *s = cat(AP_HEAD, "Warning. Matched \"Operator `Rx' with parameter `x' against variable `ARGS:q' (Value: `", v, "' )",
@@ -363,11 +369,12 @@ static void test_truncated_tail(void) {
     free(ok3);
 }
 
-// partial matches of a field name must not be searched again and again:
-// a line of this length took tens of seconds with the quadratic search
+// partial matches of a field name must not be searched again and again (a
+// 960 KB line took tens of seconds with the quadratic search); a line is
+// shorter than MSCLOG_LINE_BUFF_SIZE now, so this is the longest run that fits
 static void test_partial_field_runs(void) {
     logdata l;
-    size_t n = 320000;   // ' [l' * n = 960 KB
+    size_t n = 2500;     // ' [l' * n = 7.5 KB
     char *run = malloc(n * 3 + 1), *p = run;
     for (size_t i = 0; i < n; i++) { memcpy(p, " [l", 3); p += 3; }
     *p = '\0';
@@ -640,7 +647,93 @@ static void test_uncut_invalid_bytes(void) {
     free(v);
 }
 
+// parse() doesn't modify the line, and reads only its first len bytes: the
+// line doesn't have to be terminated, eg. it can be a part of a bigger buffer
+static void test_line_not_modified(void) {
+    logdata l;
+    char *s = cat(AP_HEAD, "Warning. Matched phrase \"nikto\" at REQUEST_HEADERS:User-Agent.", FIELDS,
+                  " [tag \"attack-reputation-scanner\"]", AP_TAIL, NULL);
+    size_t len = strlen(s);
+
+    // with a line ending, and the next line in the same buffer
+    const char *endings[] = { "", "\n", "\r\n" };
+    for (int e = 0; e < 3; e++) {
+        size_t elen = strlen(endings[e]);
+        char *next = cat(AP_HEAD, "Warning. x.", " [file \"/next\"] [line \"2\"] [id \"2\"] [tag \"next\"]",
+                         " [hostname \"next\"] [uri \"/next\"] [unique_id \"next\"]\n", NULL);
+        char *buf = cat(s, endings[e], next, NULL);
+        char *copy = strdup(buf);
+        memset(&l, '\0', sizeof(logdata));
+        parse(buf, len + elen, LOG_TYPE_APACHE, &l);
+        CHECK(strcmp(buf, copy) == 0, "ending %d: the buffer is modified", e);
+        CHECKV(l.entry_is_broken == 0 && l.log_entry_raw_length == len, "ending %d: broken=%d length %zu",
+               e, l.entry_is_broken, l.log_entry_raw_length);
+        CHECKV(strcmp(l.log_rule_file, "/etc/crs/rules/REQUEST-942.conf") == 0, "ending %d: file '%s'", e, l.log_rule_file);
+        CHECKV(l.log_rule_tags_cnt == 1 && strcmp(l.log_rule_tags, "attack-reputation-scanner") == 0,
+               "ending %d: tags %zu '%s'", e, l.log_rule_tags_cnt, l.log_rule_tags);
+        CHECKV(strcmp(l.log_unique_id, "Zc3-aHFzNBf8HIsK4ZQ") == 0, "ending %d: unique_id '%s'", e, l.log_unique_id);
+        free(next);
+        free(buf);
+        free(copy);
+    }
+
+    // a line cut inside the tail: the rest of the buffer isn't read
+    size_t cut = len - strlen(" [unique_id \"Zc3-aHFzNBf8HIsK4ZQ\"]") + strlen(" [unique_id \"Zc3");
+    char *buf = cat(s, NULL);
+    memset(&l, '\0', sizeof(logdata));
+    parse(buf, cut, LOG_TYPE_APACHE, &l);
+    CHECKV(l.entry_is_broken == 1 && has_error(&l, "[unique_id] field is truncated!"), "cut tail: broken=%d", l.entry_is_broken);
+    CHECK(strcmp(buf, s) == 0, "cut tail: the buffer is modified");
+    free(buf);
+
+    // the same line in a buffer of exactly len bytes, without '\0'
+    buf = malloc(len);
+    memcpy(buf, s, len);
+    memset(&l, '\0', sizeof(logdata));
+    parse(buf, len, LOG_TYPE_APACHE, &l);
+    CHECKV(l.entry_is_broken == 0 && strcmp(l.log_uri, "/index.php") == 0, "exact buffer: broken=%d uri '%s'",
+           l.entry_is_broken, l.log_uri);
+    free(buf);
+    free(s);
+}
+
+// a line of MSCLOG_LINE_BUFF_SIZE bytes or longer isn't parsed, the fields are
+// empty, and it's reported; one byte shorter is parsed
+static void test_line_too_long(void) {
+    logdata l;
+    char *head = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"", NULL);
+    char *tail = "\"] [unique_id \"u\"]";
+    size_t fixed = strlen(head) + strlen(tail);
+
+    for (size_t total = MSCLOG_LINE_BUFF_SIZE - 1; total <= MSCLOG_LINE_BUFF_SIZE + 1; total++) {
+        char *v = rep('x', total - fixed);
+        char *s = cat(head, v, tail, NULL);
+        memset(&l, '\0', sizeof(logdata));
+        int rc = parse(s, strlen(s), LOG_TYPE_APACHE, &l);
+        if (total < MSCLOG_LINE_BUFF_SIZE) {
+            // the uri is longer than MSCLOG_TBUFF_SIZE, so it's truncated, but the line is parsed
+            CHECK(rc == 0 && l.entry_is_modsecline == 1 && !has_error(&l, "The line is too long, it can't be parsed!"),
+                  "%zu bytes: rc=%d modsecline=%d", total, rc, l.entry_is_modsecline);
+            CHECKV(strcmp(l.log_unique_id, "u") == 0, "%zu bytes: unique_id '%s'", total, l.log_unique_id);
+        }
+        else {
+            CHECK(rc == 1 && l.entry_is_broken == 1 && l.entry_is_modsecline == 0,
+                   "%zu bytes: rc=%d broken=%d modsecline=%d", total, rc, l.entry_is_broken, l.entry_is_modsecline);
+            CHECK(l.log_entry_errors_cnt == 1 && has_error(&l, "The line is too long, it can't be parsed!"),
+                   "%zu bytes: errors %d", total, l.log_entry_errors_cnt);
+            CHECK(l.log_entry_raw_length == total, "%zu bytes: length %zu", total, l.log_entry_raw_length);
+            CHECKV(l.log_rule_file[0] == '\0' && l.log_uri[0] == '\0' && l.log_rule_tags_cnt == 0,
+                   "%zu bytes: file '%s' uri '%s'", total, l.log_rule_file, l.log_uri);
+        }
+        free(s);
+        free(v);
+    }
+    free(head);
+}
+
 int main(void) {
+    test_line_not_modified();
+    test_line_too_long();
     test_regular_lines();
     test_long_message();
     test_many_tags();
