@@ -29,6 +29,8 @@ v3.0.0 - 2026-11-16
   * PHP binding: fix the TSRM cache macro of ZTS builds, remove
     unused variables
   * Python and Ruby test scripts pass the length in bytes
+  * pkg-config file: the version and the paths come from configure
+    (it said 0.3.0, and had a fixed libdir)
   * ABI change: logdata has a new field, the SONAME is
     libmsclogparser.so.3, rebuild the bindings and applications
 
