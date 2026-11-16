@@ -59,6 +59,15 @@ modsecurity@digitalwave.hu
 // length, and this error is added
 #define MSCLEN_ERROR_FMT "The given length (%zu) is bigger than the line (%zu bytes)!"
 
+// an invalid argument value: PHP 8 throws a ValueError, PHP 7 has no
+// zend_argument_value_error() and RETURN_THROWS(), there a warning is raised
+// and parse() returns false, like for the other argument errors
+#if PHP_VERSION_ID >= 80000
+#define MSCL_ARG_VALUE_ERROR(num, msg) do { zend_argument_value_error(num, msg); RETURN_THROWS(); } while (0)
+#else
+#define MSCL_ARG_VALUE_ERROR(num, msg) do { php_error_docref(NULL, E_WARNING, "Argument #%d " msg, num); RETURN_FALSE; } while (0)
+#endif
+
 extern zend_module_entry mscphplogparser_module_entry;
 # define phpext_mscphplogparser_ptr &mscphplogparser_module_entry
 
@@ -101,12 +110,10 @@ PHP_FUNCTION(parse)
         RETURN_FALSE;
     }
     if (len < 0) {
-        zend_argument_value_error(2, "must not be negative");
-        RETURN_THROWS();
+        MSCL_ARG_VALUE_ERROR(2, "must not be negative");
     }
     if (ltype != LOG_TYPE_APACHE && ltype != LOG_TYPE_NGINX) {
-        zend_argument_value_error(3, "must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
-        RETURN_THROWS();
+        MSCL_ARG_VALUE_ERROR(3, "must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
     }
 
     // a len bigger than the line would make parse() read after its end: the
