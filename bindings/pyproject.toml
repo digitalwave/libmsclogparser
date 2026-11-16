@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "mscpylogparser"
 version = "2.0.0"
 description = "Python bindings for libmsclogparser"
-readme = "README.md"
 authors = [{name = "Ervin Hegedüs", email = "airween@digitalwave.hu"}]
 dependencies = []
 

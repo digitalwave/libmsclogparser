@@ -68,19 +68,19 @@ static int list_append_new(PyObject *list, PyObject *item) {
 }
 
 static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
-    char       *line = NULL;
-    size_t      len;
-    loglinetype ltype;
-    logdata     l;
+    char         *line = NULL;
+    unsigned long len;
+    int           ltype;
+    logdata       l;
 
+    // PyArg_ParseTuple() sets the exception that tells what is wrong
     if (!PyArg_ParseTuple(args, "ski", &line, &len, &ltype)) {
-        PyErr_SetString(PyExc_TypeError, "one or more argument missing.");
         return NULL;
     }
 
     memset(&l, '\0', sizeof(logdata));
 
-    parse(line, len, ltype, &l);
+    parse(line, (size_t)len, (loglinetype)ltype, &l);
 
     PyObject *tags = PyList_New(0);
     PyObject *errors = PyList_New(0);
@@ -105,22 +105,22 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
             if (list_append_new(errors, Py_BuildValue("s", logerr.errmsg)) < 0 ||
-                list_append_new(errorspos, Py_BuildValue("[k,k]", *logerr.startpos, *logerr.endpos)) < 0) {
+                list_append_new(errorspos, Py_BuildValue("[k,k]", (unsigned long)*logerr.startpos, (unsigned long)*logerr.endpos)) < 0) {
                 goto cleanup;
             }
         }
     }
 
-    rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:i,s:O,s:s,s:s,s:s,s:s,s:i,s:O,s:O}",
+    rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:k,s:O,s:s,s:s,s:s,s:s,s:i,s:O,s:O}",
         "entry_is_modsecline",        l.entry_is_modsecline,
         "entry_is_broken",            l.entry_is_broken,
-        "log_entry_raw_length",       l.log_entry_raw_length,
+        "log_entry_raw_length",       (unsigned long)l.log_entry_raw_length,
         "log_date_iso",               l.log_date_iso,
         "log_date_timestamp",         l.log_date_timestamp,
         "log_client",                 l.log_client,
-        "log_entry_class",            l.log_entry_class,
+        "log_entry_class",            (int)l.log_entry_class,
         "log_modsec_msg",             l.log_modsec_msg,
-        "log_modsec_msg_length",      l.log_modsec_msg_length,
+        "log_modsec_msg_length",      (unsigned long)l.log_modsec_msg_length,
         "log_modsec_reason",          l.log_modsec_reason,
         "log_modsec_operator",        l.log_modsec_operator,
         "log_modsec_operand",         l.log_modsec_operand,
@@ -137,7 +137,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         "log_rule_version",           l.log_rule_version,
         "log_rule_maturity",          l.log_rule_maturity,
         "log_rule_accuracy",          l.log_rule_accuracy,
-        "log_rule_tags_cnt",          l.log_rule_tags_cnt,
+        "log_rule_tags_cnt",          (unsigned long)l.log_rule_tags_cnt,
         "log_rule_tags",              tags,
         "log_hostname",               l.log_hostname,
         "log_uri",                    l.log_uri,
@@ -173,6 +173,9 @@ static struct PyModuleDef mscpylogparser = {
 PyMODINIT_FUNC PyInit_mscpylogparser(void) {
 
     PyObject *module = PyModule_Create(&mscpylogparser);
+    if (module == NULL) {
+        return NULL;
+    }
 
     PyModule_AddIntConstant(module, "LOG_TYPE_APACHE", LOG_TYPE_APACHE);
     PyModule_AddIntConstant(module, "LOG_TYPE_NGINX", LOG_TYPE_NGINX);
