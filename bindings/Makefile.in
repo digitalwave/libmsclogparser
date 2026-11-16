@@ -295,7 +295,7 @@ top_srcdir = @top_srcdir@
 @ENABLE_PYTHON_TRUE@                --ignore-installed \
 @ENABLE_PYTHON_TRUE@                --no-build-isolation .
 
-@ENABLE_PYTHON_TRUE@PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mypylogparser*
+@ENABLE_PYTHON_TRUE@PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mscpylogparser*
 @ENABLE_LUA_TRUE@LUALIBFLAG = -shared -fpic
 @ENABLE_LUA_TRUE@LUACFLAGS = -I../src $(LUA_INCLUDE) -L../src/.libs 
 @ENABLE_RUBY_TRUE@RUBYLIBFLAG = -shared -fPIC -L$(RUBY_ARCHLIBDIR)

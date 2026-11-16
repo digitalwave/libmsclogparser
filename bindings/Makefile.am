@@ -11,7 +11,7 @@ PYTHON_INSTALL_CMD = pip install --root=$(DESTDIR)/ \
                 --ignore-installed \
                 --no-build-isolation .
 
-PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mypylogparser*
+PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mscpylogparser*
 
 
 clean-py:
