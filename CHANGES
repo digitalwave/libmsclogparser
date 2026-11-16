@@ -8,6 +8,12 @@ v3.0.0 - 2026-11-16
   * A line of 8192 (MSCLOG_LINE_BUFF_SIZE) bytes or longer (without
     the line ending) isn't parsed, it's reported as an error, and
     entry_is_modsecline is set if it's a ModSecurity line
+  * Fix: the fields are searched only in the ModSecurity part of the
+    line, before the context of the web server (Nginx: client,
+    server, request, host, referrer; Apache: referer): fake fields
+    there replaced the real [file], [id], [msg], [hostname],
+    [unique_id], ...; Nginx log_client and log_server are used only
+    if their part is right after the ModSecurity part
   * parse() initializes the logdata: the caller doesn't have to
     clear it before every line, the bindings don't clear it anymore
   * Fix: don't store a part of a UTF-8 character when a field is

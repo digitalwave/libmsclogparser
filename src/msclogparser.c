@@ -674,7 +674,10 @@ static void find_tags(char *line, const size_t *offset, logdata *l) {
     }
 }
 
-static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart) {
+// fulllen: the length of the whole line; the line is terminated at the end of
+// the ModSecurity part (l->log_entry_raw_length), the nginx context follows it
+// after that '\0' if fulllen is bigger, see modsec_part_end()
+static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart, size_t fulllen) {
 
     // parse tail part of logline
     // Nginx:
@@ -787,17 +790,22 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     // log shows the invented name. That name is in log_server, see
     // parse_ngx_context().
     // If [hostname] is empty, eg. log is chunked, we have to process the
-    // 'host: "..."' field
+    // 'host: "..."' field; it's in the nginx context, after the ModSecurity part
     if (linetype == LOG_TYPE_NGINX && strlen(l->log_hostname) == 0) {
+        size_t from = hostlast, end = l->log_entry_raw_length;
+        if (fulllen > end) {
+            from = end + 1;
+            end = fulllen;
+        }
         memset(&matches, '\0', sizeof(size_t)*2);
-        mcnt = find_pattern(line, hostlast, l->log_entry_raw_length, "host: \"", 7, &matches, MATCH_FIRST);
+        mcnt = find_pattern(line, from, end, "host: \"", 7, &matches, MATCH_FIRST);
         if (mcnt > 0) {
             k = matches[0] + matches[1];
             t = 0;
-            while(k < l->log_entry_raw_length && line[k] != '"' && t < tlen) {
+            while(k < end && line[k] != '"' && t < tlen) {
                 tbuff[t++] = line[k++];
             }
-            if (t == tlen && k < l->log_entry_raw_length && line[k] != '"') {
+            if (t == tlen && k < end && line[k] != '"') {
                 set_error(l, "[host] field is truncated!", matches[0] + matches[1], k);
                 t = utf8_cut_len(tbuff, t, line[k]);
             }
@@ -806,7 +814,7 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
         }
         else {
             // broken line
-            set_error(l, "Can't find 'host: \"\"' field!", hostlast, l->log_entry_raw_length);
+            set_error(l, "Can't find 'host: \"\"' field!", hostlast, end);
             return;
         }
     }
@@ -848,7 +856,11 @@ static void set_warning(logdata *l, const char *errmsg, size_t pos0, size_t pos1
     l->entry_is_broken = broken;
 }
 
-static void parse_ngx_context(char *line, logdata *l) {
+// partend: the end of the ModSecurity part, where the real context begins
+// (modsec_part_end()); the one ', client: ADDR, server: ' must be there, so a
+// fake one in the message isn't used if the real context is missing (eg. the
+// line was cut before it)
+static void parse_ngx_context(char *line, size_t partend, logdata *l) {
 
     size_t matches[2];
     size_t pos = 0;
@@ -884,7 +896,7 @@ static void parse_ngx_context(char *line, logdata *l) {
         set_warning(l, "client, server: ambiguous context, values not used", 0, l->log_entry_raw_length);
         return;
     }
-    if (cnt != 1) {
+    if (cnt != 1 || addrpos != partend + 10) {
         return;
     }
 
@@ -904,7 +916,7 @@ static void parse_ngx_context(char *line, logdata *l) {
     return;
 }
 
-static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linetype) {
+static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linetype, size_t fulllen) {
 
     size_t matches[2], prevstart;
     int mcnt = 0;
@@ -1091,7 +1103,7 @@ static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linet
     prevstart--;
     *pos = prevstart;
 
-    parse_tail(linetype, line, pos, l, NULL);
+    parse_tail(linetype, line, pos, l, NULL, fulllen);
 
     return 0;
 }
@@ -1236,7 +1248,7 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
     }
 
     size_t hostpos = 0;
-    parse_tail(linetype, line, pos, l, &hostpos);
+    parse_tail(linetype, line, pos, l, &hostpos, l->log_entry_raw_length);
     if (l->entry_is_broken == 1) {
         return;
     }
@@ -1260,6 +1272,81 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
 }
 
 // line is a copy of the caller's line, it can be modified
+// The server appends its own context to the ModSecurity message, and it
+// contains values of the request that aren't escaped: nginx writes
+// ', client: ADDR, server: NAME[, request: "LINE"]...[, host: "HOST"]
+// [, referrer: "REFERER"]' (see parse_ngx_context()), Apache 2.4 writes
+// ', referer: REFERER'. Most fields are searched from the end of the line
+// (MATCH_LAST), so a fake field in eg. the Referer header would replace the
+// real one: the fields are searched only in the ModSecurity part, before the
+// context. It returns the position where the context begins, or len.
+// The real context follows the last field of the message: [unique_id "..."]
+// (ModSecurity v2) or [ref "..."] (libmodsecurity3), their values never
+// contain a '"'. A fake marker can be anywhere: in the message (a matched
+// value doesn't need a '"' for it, and the [uri] of libmodsecurity3 isn't
+// escaped), or in the context itself. The first marker right after one of
+// these fields is used, so a fake one in the context can't move the end, and
+// a fake one in the message only if it fakes the last field too - that needs
+// a '"' in the message, and ModSecurity has to escape it (libmodsecurity3
+// doesn't do it in [uri] yet). If there isn't such a marker, but the line
+// has fields ([file ", [id " or [unique_id "), the context is missing (eg.
+// nginx cut the line before it, or in the middle of the message), so there is
+// nothing to cut off: the whole line is used - a fake marker in a matched
+// value mustn't hide the fields. Otherwise (a message without fields) the
+// first marker is used. The search starts at from (after
+// ' ModSecurity:').
+// 1 if line[0..pos) ends with a [unique_id "..."] or a [ref "..."] field
+static int ends_with_last_field(const char *line, size_t from, size_t pos) {
+    if (pos < from + 2 || line[pos-2] != '"' || line[pos-1] != ']') {
+        return 0;
+    }
+    // the opening '"' of the value
+    size_t q = pos - 2;
+    while (q > from && line[q-1] != '"') {
+        q--;
+    }
+    if (q == from) {
+        return 0;
+    }
+    q--;
+    return (q >= from + 11 && strncmp(line + q - 11, "[unique_id ", 11) == 0)
+        || (q >= from + 5 && strncmp(line + q - 5, "[ref ", 5) == 0);
+}
+
+static size_t modsec_part_end(const char *line, size_t from, size_t len, loglinetype t) {
+    const char *marker = (t == LOG_TYPE_NGINX) ? ", client: " : ", referer: ";
+    size_t mlen = strlen(marker);
+    size_t first = len;
+    const char *p = line + from;
+
+    while ((p = strstr(p, marker)) != NULL) {
+        size_t pos = (size_t)(p - line);
+        int valid = 1;
+        if (t == LOG_TYPE_NGINX) {
+            // ', client: ADDR, server: ', ADDR doesn't contain ' ' or ','
+            size_t k = pos + mlen;
+            while (k < len && line[k] != ' ' && line[k] != ',') {
+                k++;
+            }
+            valid = (k > pos + mlen && strncmp(line + k, ", server: ", 10) == 0);
+        }
+        if (valid) {
+            if (ends_with_last_field(line, from, pos)) {
+                return pos;
+            }
+            if (first == len) {
+                first = pos;
+            }
+        }
+        p++;
+    }
+    if (first < len && (strstr(line + from, " [file \"") != NULL || strstr(line + from, "[id \"") != NULL
+                        || strstr(line + from, "[unique_id \"") != NULL)) {
+        return len;
+    }
+    return first;
+}
+
 static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
     size_t offset = 0;
@@ -1328,6 +1415,13 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
     // continue only if it is there
     if (mcnt == 1) {
         l->entry_is_modsecline = 1;
+        // the fields are parsed only in the ModSecurity part: the line is
+        // terminated before the server's context until then, see
+        // modsec_part_end(); log_entry_raw_length is set back to len after it
+        size_t partend = modsec_part_end(line, matches[0] + matches[1], len, t);
+        char partendchr = line[partend];
+        line[partend] = '\0';
+        l->log_entry_raw_length = partend;
         if (t == LOG_TYPE_APACHE) {
             parse_date_apache(line, l);
         }
@@ -1354,6 +1448,8 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
                 mcnt = find_pattern(line, 65, len, "[remote ", 8, &matches, MATCH_FIRST);
                 if (mcnt != 1) {
                     set_error(l, "Can't find [client] or [remote] field!", 0, len);
+                    line[partend] = partendchr;
+                    l->log_entry_raw_length = len;
                     return 1;
                 }
             }
@@ -1391,7 +1487,7 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
                 l->log_entry_class = LOGMSG_WARNING;
             }
             if (mcnt == 1 && toffset == matches[0]-1) {
-                int regular_ok = parse_regular(line, &toffset, l, LOG_TYPE_APACHE);
+                int regular_ok = parse_regular(line, &toffset, l, LOG_TYPE_APACHE, len);
                 if (l->log_entry_class == LOGMSG_UNKNOWN) {
                     l->log_entry_class = LOGMSG_ACCDENIED;
                 }
@@ -1418,7 +1514,7 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
                         l->log_entry_class = LOGMSG_REQBODY;
                         size_t offs = toffset;
                         size_t hostpos = 0;
-                        parse_tail(t, line, &offs, l, &hostpos);
+                        parse_tail(t, line, &offs, l, &hostpos, l->log_entry_raw_length);
                         if (hostpos > 0) {
                             int k = toffset+1 + utf8_cut_start(line, toffset+1);
                             int i = 0;
@@ -1439,7 +1535,7 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
                             l->log_entry_class = LOGMSG_AUDITLOG;
                             size_t offs = toffset;
                             size_t hostpos = 0;
-                            parse_tail(t, line, &offs, l, &hostpos);
+                            parse_tail(t, line, &offs, l, &hostpos, l->log_entry_raw_length);
                             if (hostpos > 0) {
                                 int k = toffset+1 + utf8_cut_start(line, toffset+1);
                                 int i = 0;
@@ -1460,9 +1556,16 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         }
 
         if (t == LOG_TYPE_NGINX) {
-            parse_regular(line, &toffset, l, LOG_TYPE_NGINX);
+            parse_regular(line, &toffset, l, LOG_TYPE_NGINX, len);
+        }
+
+        // the context is parsed on the whole line
+        line[partend] = partendchr;
+        l->log_entry_raw_length = len;
+
+        if (t == LOG_TYPE_NGINX) {
             // log_client and log_server
-            parse_ngx_context(line, l);
+            parse_ngx_context(line, partend, l);
             // classify the message only if the nginx context is in the line
             memset(&matches, '\0', sizeof(size_t)*2);
             mcnt = find_pattern(line, toffset, len, ", client: ", 10, &matches, MATCH_FIRST);

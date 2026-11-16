@@ -63,6 +63,8 @@ The writing of the code was preceded by thorough research. The expectation was t
 
 Even though the code is written in C, but it does not use any dynamic memory handling: `parse()` copies the line to a buffer in the `logdata` structure (`linebuf`), so a line of `MSCLOG_LINE_BUFF_SIZE` (8192) bytes or longer (without the line ending) can't be parsed, `parse()` reports an error for it: the fields are empty, `entry_is_broken` is 1, and `entry_is_modsecline` is 1 if it's a ModSecurity line. It also does not have any library dependecy (eg. PCRE/PCRE2). Therefore it's really fast and convenience to use it.
 
+The web server appends its own context to the ModSecurity message (Nginx: `, client: ADDR, server: NAME, request: "...", host: "...", referrer: "..."`, Apache: `, referer: ...`), and it contains values sent by the client without escaping. The ModSecurity fields (`[file]`, `[id]`, `[msg]`, `[hostname]`, `[unique_id]`, ...) are searched only before this context, so fake fields in the request line or in a header can't replace the real ones. The end of the ModSecurity part is the first context after its last field (`[unique_id "..."]` or `[ref "..."]`).
+
 ## Licensing
 
 libmsclogparser is dual licensed under the following licenses. You can use the software according to the terms of your chosen license.
@@ -249,7 +251,7 @@ will give
 45.134.144.140 (Nginx)
 ```
 
-As you can see, in case of Apache the parser will process the first `[client]` field. In case of Nginx this value is at the end of the line, in the `, client: ADDR, server: NAME` part that Nginx appends to the line. This part isn't escaped, and the client can send a fake one (eg. in the request line, or in a header), so the value is used only in the same cases as [`log_server`](#log_server): if the line contains exactly one `, client: ADDR, server: `, and it isn't cut by Nginx. Otherwise `log_client` is an empty string; an injection can hide the address, but can't replace it.
+As you can see, in case of Apache the parser will process the first `[client]` field. In case of Nginx this value is at the end of the line, in the `, client: ADDR, server: NAME` part that Nginx appends to the line. This part isn't escaped, and the client can send a fake one (eg. in the request line, or in a header), so the value is used only in the same cases as [`log_server`](#log_server): if the line contains exactly one `, client: ADDR, server: `, it's right after the ModSecurity part (after its last field), and the line isn't cut by Nginx. Otherwise `log_client` is an empty string; an injection can hide the address, but can't replace it.
 
 ##### `log_entry_class`
 Contains the parsed ModSecurity message type.
@@ -590,7 +592,7 @@ This field can't be chunked.
 ##### `log_server`
 Contains the `server_name` of the Nginx `server` block that served the request, from the `, server: ` part that Nginx appends to the line, eg. `_` for a default server. Compare to `log_hostname`, which is the `Host` the client sent.
 
-It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part or the name is longer than 255 bytes, the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken, and [`log_client`](#log_client) is empty too: the two values come from the same `, client: ADDR, server: NAME` part.
+It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part right after the ModSecurity part (after its last field) or the name is longer than 255 bytes, the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken, and [`log_client`](#log_client) is empty too: the two values come from the same `, client: ADDR, server: NAME` part.
 
 Type: `*char`
 Max length: 255 bytes

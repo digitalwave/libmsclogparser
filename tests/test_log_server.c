@@ -14,6 +14,11 @@ referrer) the real one. The rule: exactly one ", client: ADDR, server: "
 in the line -> its ADDR and NAME; otherwise empty strings and exactly one
 error message (ambiguous or truncated line). Parsing continues either way.
 
+test_fake_fields_in_context(): the ModSecurity fields ([file], [id],
+[hostname], [unique_id], ...) are searched only before the context (nginx)
+or before ", referer: " (Apache), so fake fields in the request line, the
+host or the referrer can't replace the real ones.
+
 Build and run: make check (or tests/run-tests.sh).
 */
 
@@ -178,7 +183,114 @@ static char * build_line(const server_case *c) {
     return line;
 }
 
+#define NGX_REAL_TAIL "[hostname \"www.example.test\"] [uri \"/\"] [unique_id \"168142074224.426959\"] [ref \"o0,5v10,5\"]"
+#define NGX_FAKE_TAIL "\"] [file \"/evil.conf\"] [line \"1\"] [id \"1\"] [msg \"evil\"] [hostname \"evil.example.test\"] [uri \"/evil\"] [unique_id \"EVIL\"] [ref \"\"]"
+#define AP_LINE "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] [client 192.0.2.10:1234] ModSecurity: Warning. Pattern match \"x\" at ARGS:q. " \
+    "[file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"10\"] [id \"942100\"] [msg \"SQL Injection\"] [severity \"CRITICAL\"] [tag \"attack-sqli\"] " \
+    "[hostname \"www.example.test\"] [uri \"/\"] [unique_id \"Zc3-aHFzNBf8HIsK4ZQ\"]"
+#define AP_FAKE_TAIL "x\"] [file \"/evil.conf\"] [line \"1\"] [id \"1\"] [msg \"evil\"] [tag \"evil\"] [hostname \"evil.example.test\"] [uri \"/evil\"] [unique_id \"EVIL\"]"
+
+typedef struct {
+    const char *name;
+    loglinetype type;
+    const char *value;          // nginx: matched value
+    const char *hostname;       // nginx: [hostname]
+    const char *suffix;         // nginx: the context; Apache: appended to AP_LINE
+    // expected
+    const char *hostname_exp;
+    const char *unique_id_exp;
+    const char *server_exp;     // nginx only, NULL: log_server and log_client aren't checked
+} fake_fields_case;
+
+static const fake_fields_case fake_cases[] = {
+    { "nginx, fake fields in the referrer", LOG_TYPE_NGINX, "1", "www.example.test",
+      REAL ", host: \"www.example.test\", referrer: \"x" NGX_FAKE_TAIL "\"",
+      "www.example.test", "168142074224.426959", "www.example.test" },
+    { "nginx, fake fields in the request line", LOG_TYPE_NGINX, "1", "www.example.test",
+      ", client: 192.0.2.10, server: www.example.test, request: \"GET /?q=" NGX_FAKE_TAIL " HTTP/1.1\", host: \"www.example.test\"",
+      "www.example.test", "168142074224.426959", "www.example.test" },
+    { "nginx, fake fields in the host", LOG_TYPE_NGINX, "1", "www.example.test",
+      REAL ", host: \"x" NGX_FAKE_TAIL "\"",
+      "www.example.test", "168142074224.426959", "www.example.test" },
+    // the fake context after the fake fields is ambiguous for log_client and
+    // log_server, but the end of the ModSecurity part is still the real one
+    { "nginx, fake fields and context in the referrer", LOG_TYPE_NGINX, "1", "www.example.test",
+      REAL ", referrer: \"x" NGX_FAKE_TAIL ", client: 192.0.2.66, server: evil.example.test, referrer: \"z\"",
+      "www.example.test", "168142074224.426959", "" },
+    // a fake context in the message (no '"' needed) doesn't end the ModSecurity part
+    { "nginx, fake context in the matched value", LOG_TYPE_NGINX,
+      "1, client: 192.0.2.66, server: evil.example.test", "www.example.test",
+      REAL ", referrer: \"x" NGX_FAKE_TAIL "\"",
+      "www.example.test", "168142074224.426959", "" },
+    // no context at all (eg. nginx cut the line before it): a fake marker in the
+    // message doesn't hide the fields
+    { "nginx, no context, fake context in the matched value", LOG_TYPE_NGINX,
+      "1, client: 192.0.2.66, server: evil.example.test", "www.example.test", "",
+      "www.example.test", "168142074224.426959", NULL },
+    // an empty [hostname] is taken from the host: of the context, not from a fake one
+    { "nginx, empty hostname, fake host in the referrer", LOG_TYPE_NGINX, "1", "",
+      REAL ", host: \"real.example.test\", referrer: \"x\", host: \"evil.example.test\" [hostname \"evil\"]\"",
+      "real.example.test", "168142074224.426959", "www.example.test" },
+    { "apache, fake fields in the referer", LOG_TYPE_APACHE, NULL, NULL,
+      ", referer: " AP_FAKE_TAIL,
+      "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
+    { "apache, fake fields and referer in the referer", LOG_TYPE_APACHE, NULL, NULL,
+      ", referer: " AP_FAKE_TAIL ", referer: x",
+      "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
+    { "apache, no referer", LOG_TYPE_APACHE, NULL, NULL, "",
+      "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
+};
+
+static void test_fake_fields_in_context(void) {
+    for (size_t i = 0; i < sizeof(fake_cases) / sizeof(fake_cases[0]); i++) {
+        const fake_fields_case *c = &fake_cases[i];
+        char line[4096];
+        if (c->type == LOG_TYPE_NGINX) {
+            snprintf(line, sizeof(line),
+                "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Warning. Matched "
+                "\"Operator `Rx' with parameter `x' against variable `ARGS:q' (Value: `%s' ) "
+                "[file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"10\"] [id \"942100\"] "
+                "[msg \"SQL Injection\"] [severity \"2\"] [tag \"attack-sqli\"] "
+                "[hostname \"%s\"] [uri \"/\"] [unique_id \"168142074224.426959\"] [ref \"o0,5v10,5\"]%s",
+                c->value, c->hostname, c->suffix);
+        }
+        else {
+            snprintf(line, sizeof(line), "%s%s", AP_LINE, c->suffix);
+        }
+
+        logdata l;
+        memset(&l, '\0', sizeof(l));
+        parse(line, strlen(line), c->type, &l);
+
+        // without a context the line is broken ("Can't find client field!")
+        CHECK(l.entry_is_modsecline == 1 && l.entry_is_broken == (c->server_exp == NULL && c->type == LOG_TYPE_NGINX),
+              "%s: modsecline %d broken %d", c->name, l.entry_is_modsecline, l.entry_is_broken);
+        CHECK(l.log_entry_raw_length == strlen(line), "%s: length %zu", c->name, l.log_entry_raw_length);
+        CHECK(strcmp(l.log_rule_file, "/etc/crs/rules/REQUEST-942.conf") == 0, "%s: file '%s'", c->name, l.log_rule_file);
+        CHECK(strcmp(l.log_rule_line, "10") == 0, "%s: line '%s'", c->name, l.log_rule_line);
+        CHECK(strcmp(l.log_rule_id, "942100") == 0, "%s: id '%s'", c->name, l.log_rule_id);
+        CHECK(strcmp(l.log_rule_msg, "SQL Injection") == 0, "%s: msg '%s'", c->name, l.log_rule_msg);
+        CHECK(l.log_rule_tags_cnt == 1 && strcmp(l.log_rule_tags, "attack-sqli") == 0, "%s: tags %zu '%s'", c->name,
+              l.log_rule_tags_cnt, l.log_rule_tags);
+        CHECK(strcmp(l.log_hostname, c->hostname_exp) == 0, "%s: hostname '%s'", c->name, l.log_hostname);
+        CHECK(strcmp(l.log_uri, "/") == 0, "%s: uri '%s'", c->name, l.log_uri);
+        CHECK(strcmp(l.log_unique_id, c->unique_id_exp) == 0, "%s: unique_id '%s'", c->name, l.log_unique_id);
+        if (c->type == LOG_TYPE_NGINX && c->server_exp == NULL) {
+            CHECK(l.log_client[0] == '\0' && l.log_server[0] == '\0', "%s: client '%s' server '%s' without a context",
+                  c->name, l.log_client, l.log_server);
+        }
+        if (c->type == LOG_TYPE_NGINX && c->server_exp != NULL) {
+            CHECK(strcmp(l.log_server, c->server_exp) == 0, "%s: server '%s'", c->name, l.log_server);
+            CHECK(strcmp(l.log_client, "192.0.2.66") != 0, "%s: client is the fake", c->name);
+        }
+        else if (c->type == LOG_TYPE_APACHE) {
+            CHECK(strcmp(l.log_client, "192.0.2.10:1234") == 0, "%s: client '%s'", c->name, l.log_client);
+        }
+    }
+}
+
 int main(void) {
+    test_fake_fields_in_context();
     size_t n = sizeof(cases) / sizeof(cases[0]);
     for (size_t i = 0; i < n; i++) {
         const server_case *c = &cases[i];
