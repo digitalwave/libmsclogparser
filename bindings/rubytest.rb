@@ -29,7 +29,7 @@ else
 end
 
 File.readlines(ARGV[0]).each do |line|
-   result = parse(line, line.length, logtype)
+   result = parse(line, line.bytesize, logtype)
    puts result
    result = nil
 end
