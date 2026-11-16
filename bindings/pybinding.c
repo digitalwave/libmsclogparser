@@ -60,7 +60,7 @@ modsecurity@digitalwave.hu
 
 static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log line.\n\n"
     "line is str or bytes, len is its length in bytes. The values of the fields\n"
-    "are str if line is str, and bytes if line is bytes.";
+    "and the error messages are str if line is str, and bytes if line is bytes.";
 
 // the result: the values of the fields are S, "s" (str) or "y" (bytes)
 #define MSCPY_RESULT_FORMAT(S) \
@@ -152,7 +152,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         msclogerr logerr;
         for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
-            if (list_append_new(errors, Py_BuildValue("s", logerr.errmsg)) < 0 ||
+            if (list_append_new(errors, Py_BuildValue(as_bytes ? "y" : "s", logerr.errmsg)) < 0 ||
                 list_append_new(errorspos, Py_BuildValue("[k,k]", (unsigned long)*logerr.startpos, (unsigned long)*logerr.endpos)) < 0) {
                 goto cleanup;
             }
@@ -162,7 +162,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
     if (lenerr) {
         char msg[128];
         snprintf(msg, sizeof(msg), MSCLEN_ERROR_FMT, givenlen, (size_t)linelen);
-        if (list_append_new(errors, Py_BuildValue("s", msg)) < 0 ||
+        if (list_append_new(errors, Py_BuildValue(as_bytes ? "y" : "s", msg)) < 0 ||
             list_append_new(errorspos, Py_BuildValue("[k,k]", (unsigned long)linelen, (unsigned long)givenlen)) < 0) {
             goto cleanup;
         }

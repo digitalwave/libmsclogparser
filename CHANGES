@@ -30,7 +30,8 @@ v3.0.0 - 2026-11-16
   * parse() reports an unknown log type as an error, the bindings
     raise an error for it
   * Python binding: fix reference leaks, report the real argument
-    errors, accept the line as bytes (the values are bytes too),
+    errors, accept the line as bytes (the values and the error
+    messages are bytes too),
     build with setuptools instead of distutils
   * Ruby binding: parse() and the constants are in the
     MscRubyLogParser module (API change), new entry_is_modsecline,
