@@ -93,8 +93,6 @@ PHP_FUNCTION(parse)
     zend_long     len;
     zend_long     ltype;
 
-    zend_string *retval;
-
     if (zend_parse_parameters(ZEND_NUM_ARGS(), "sll", &line, &linelen, &len, &ltype) == FAILURE) {
         RETURN_FALSE;
     }
@@ -102,9 +100,9 @@ PHP_FUNCTION(parse)
     logdata l;
     memset(&l, '\0', sizeof(logdata));
 
-    int rc = parse(line, (size_t)len, (loglinetype)ltype, &l);
+    parse(line, (size_t)len, (loglinetype)ltype, &l);
 
-    zval arr, tags, errors, errorspos;
+    zval tags, errors, errorspos;
 
     array_init(return_value);
 
@@ -179,7 +177,7 @@ static const zend_function_entry mscphplogparser_functions[] = {
 };
 
 PHP_MINIT_FUNCTION(mscphplogparser) {
-#if defined(ZTS) && defined(COMPILE_DL_TEST)
+#if defined(ZTS) && defined(COMPILE_DL_MSCPHPLOGPARSER)
     ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 
