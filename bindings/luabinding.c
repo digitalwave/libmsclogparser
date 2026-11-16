@@ -54,7 +54,7 @@ modsecurity@digitalwave.hu
 
 #include "../src/msclogparser.h"
 
-#define MODULE_VERSION "2.0.0"
+#define MODULE_VERSION "3.0.0"
 
 // the len argument is bigger than the line: the line is parsed with its own
 // length, and this error is added

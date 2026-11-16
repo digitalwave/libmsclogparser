@@ -1,3 +1,32 @@
+v3.0.0 - 2026-11-16
+-------------------
+  * parse() doesn't modify the line: it parses a copy in the new
+    logdata field linebuf, takes a const char *, reads only the
+    first len bytes, and the line doesn't have to be terminated
+    (before it wrote a '\0' to line[len], which changed the script
+    strings in the bindings, and crashed PHP with opcache)
+  * A line of 8192 (MSCLOG_LINE_BUFF_SIZE) bytes or longer isn't
+    parsed, it's reported as an error
+  * Fix: don't store a part of a UTF-8 character when a field is
+    cut, and don't trim a value that isn't cut
+  * Fix: quadratic re-search in find_pattern() on lines with many
+    partial field names
+  * Bindings: if len is bigger than the line, the whole line is
+    parsed, and an error is added to log_entry_errors; a negative
+    len raises an error
+  * Python binding: fix reference leaks, report the real argument
+    errors, accept the line as bytes (the values are bytes too),
+    build with setuptools instead of distutils
+  * Ruby binding: parse() and the constants are in the
+    MscRubyLogParser module (API change), new entry_is_modsecline,
+    the values get the encoding of the line
+  * Lua binding: new entry_is_broken, the constants are integers
+  * PHP binding: fix the TSRM cache macro of ZTS builds, remove
+    unused variables
+  * Python and Ruby test scripts pass the length in bytes
+  * ABI change: logdata has a new field, the SONAME is
+    libmsclogparser.so.3, rebuild the bindings and applications
+
 v2.0.0 - 2026-11-03
 -------------------
   * New field: log_server, the server_name of the Nginx server

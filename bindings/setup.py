@@ -2,7 +2,7 @@ from setuptools import setup, Extension
 
 def main():
     setup(name="mscpylogparser",
-          version="2.0.0",
+          version="3.0.0",
           description="Python interface for parsing ModSecurity generated error.log lines",
           author="Ervin Hegedus",
           author_email="airween@digitalwave.hu",
