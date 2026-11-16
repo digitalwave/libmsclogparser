@@ -109,7 +109,7 @@ Depends on your log source, you have to use one of `LOG_TYPE_APACHE` or `LOG_TYP
 `MODULE_VERSION` exists only in binding modules. This constant describes the module version, which could be different than the `LIBRARY_VERSION` (normally a bigger value), and could be different in bindings.
 
 #### Constants in bindings
-Depends on the used binding, these constants will appear in different ways: in some cases they are available through the module prefix (eg. in Python: `mscpylogparser.LOG_TYPE_APACHE`) or just simple the constant itself (eg. in Ruby: `LOG_TYPE_NGINX`). For more information, please check the test scripts.
+Depends on the used binding, these constants will appear in different ways: in some cases they are available through the module prefix (eg. in Python: `mscpylogparser.LOG_TYPE_APACHE`) or the module namespace (eg. in Ruby: `MscRubyLogParser::LOG_TYPE_NGINX`, and the function is `MscRubyLogParser.parse()`). For more information, please check the test scripts.
 
 ### Structure
 

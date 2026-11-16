@@ -131,18 +131,20 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
 
 void Init_mscrubylogparser(void) {
 
-    rb_define_method(rb_cObject, "parse", mscrubylogparser_parse, 3);
+    VALUE mod = rb_define_module("MscRubyLogParser");
 
-    rb_define_const(rb_cObject, "LOG_TYPE_APACHE", INT2NUM(LOG_TYPE_APACHE));
-    rb_define_const(rb_cObject, "LOG_TYPE_NGINX", INT2NUM(LOG_TYPE_NGINX));
+    rb_define_module_function(mod, "parse", mscrubylogparser_parse, 3);
 
-    rb_define_const(rb_cObject, "LOGMSG_UNKNOWN", INT2NUM(LOGMSG_UNKNOWN));
-    rb_define_const(rb_cObject, "LOGMSG_WARNING", INT2NUM(LOGMSG_WARNING));
-    rb_define_const(rb_cObject, "LOGMSG_ACCDENIED",INT2NUM(LOGMSG_ACCDENIED));
-    rb_define_const(rb_cObject, "LOGMSG_REQBODY", INT2NUM(LOGMSG_REQBODY));
-    rb_define_const(rb_cObject, "LOGMSG_ERROR", INT2NUM(LOGMSG_ERROR));
-    rb_define_const(rb_cObject, "LOGMSG_AUDITLOG", INT2NUM(LOGMSG_AUDITLOG));
+    rb_define_const(mod, "LOG_TYPE_APACHE", INT2NUM(LOG_TYPE_APACHE));
+    rb_define_const(mod, "LOG_TYPE_NGINX", INT2NUM(LOG_TYPE_NGINX));
 
-    rb_define_const(rb_cObject, "LIBRARY_VERSION", rb_str_new2(MSCLOGPARSER_VERSION));
-    rb_define_const(rb_cObject, "MODULE_VERSION", rb_str_new2(MODULE_VERSION));
+    rb_define_const(mod, "LOGMSG_UNKNOWN", INT2NUM(LOGMSG_UNKNOWN));
+    rb_define_const(mod, "LOGMSG_WARNING", INT2NUM(LOGMSG_WARNING));
+    rb_define_const(mod, "LOGMSG_ACCDENIED", INT2NUM(LOGMSG_ACCDENIED));
+    rb_define_const(mod, "LOGMSG_REQBODY", INT2NUM(LOGMSG_REQBODY));
+    rb_define_const(mod, "LOGMSG_ERROR", INT2NUM(LOGMSG_ERROR));
+    rb_define_const(mod, "LOGMSG_AUDITLOG", INT2NUM(LOGMSG_AUDITLOG));
+
+    rb_define_const(mod, "LIBRARY_VERSION", rb_str_new2(MSCLOGPARSER_VERSION));
+    rb_define_const(mod, "MODULE_VERSION", rb_str_new2(MODULE_VERSION));
 }
