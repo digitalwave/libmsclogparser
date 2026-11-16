@@ -49,25 +49,44 @@ modsecurity@digitalwave.hu
 #include "lua.h"
 #include "lauxlib.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "../src/msclogparser.h"
 
 #define MODULE_VERSION "2.0.0"
 
+// the len argument is bigger than the line: the line is parsed with its own
+// length, and this error is added
+#define MSCLEN_ERROR_FMT "The given length (%zu) is bigger than the line (%zu bytes)!"
+
 static int msclualogparser_parse (lua_State *L) {
     if (lua_gettop(L) != 3) {
         return luaL_error(L, "incorrect number of arguments");
     }
 
-    const char *line = luaL_checkstring(L, 1);
-    size_t len = (size_t)luaL_checkinteger(L, 2);
+    size_t linelen;
+    const char *line = luaL_checklstring(L, 1, &linelen);
+    lua_Integer ilen = luaL_checkinteger(L, 2);
+    luaL_argcheck(L, ilen >= 0, 2, "len must not be negative");
+    size_t len = (size_t)ilen;
     loglinetype ltype = (loglinetype)luaL_checkinteger(L, 3);
+
+    // a len bigger than the line would make parse() read after its end: the
+    // line is parsed with its own length, and the error is reported
+    size_t givenlen = len;
+    int lenerr = len > linelen;
+    if (lenerr) {
+        len = linelen;
+    }
 
     logdata l;
     memset(&l, '\0', sizeof(logdata));
 
     parse(line, len, ltype, &l);
+    if (lenerr) {
+        l.entry_is_broken = 1;
+    }
 
     lua_newtable(L);
     int maintable = lua_gettop(L);
@@ -207,7 +226,7 @@ static int msclualogparser_parse (lua_State *L) {
 
 
     lua_pushstring(L, "log_entry_errors_cnt");
-    lua_pushinteger(L, l.log_entry_errors_cnt);
+    lua_pushinteger(L, l.log_entry_errors_cnt + lenerr);
     lua_settable(L, maintable);
 
 
@@ -225,6 +244,13 @@ static int msclualogparser_parse (lua_State *L) {
             lua_pushstring(L, logerr.errmsg);
             lua_settable(L, errorstable);            
         }
+    }
+    if (lenerr) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), MSCLEN_ERROR_FMT, givenlen, linelen);
+        lua_pushinteger(L, l.log_entry_errors_cnt + 1);
+        lua_pushstring(L, msg);
+        lua_settable(L, errorstable);
     }
 
     lua_settable(L, maintable);
@@ -256,6 +282,18 @@ static int msclualogparser_parse (lua_State *L) {
 
             lua_settable(L, errorspostable);
         }
+    }
+    if (lenerr) {
+        lua_pushinteger(L, l.log_entry_errors_cnt + 1);
+        lua_newtable(L);
+        subtable = lua_gettop(L);
+        lua_pushinteger(L, 1);
+        lua_pushinteger(L, (lua_Integer)linelen);
+        lua_settable(L, subtable);
+        lua_pushinteger(L, 2);
+        lua_pushinteger(L, (lua_Integer)givenlen);
+        lua_settable(L, subtable);
+        lua_settable(L, errorspostable);
     }
 
     lua_settable(L, maintable);

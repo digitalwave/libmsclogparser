@@ -53,18 +53,38 @@ modsecurity@digitalwave.hu
 
 #define MODULE_VERSION "2.0.0"
 
+// the len argument is bigger than the line: the line is parsed with its own
+// length, and this error is added
+#define MSCLEN_ERROR_FMT "The given length (%zu) is bigger than the line (%zu bytes)!"
+
 static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE arg3) {
 
     const char  *line  = StringValueCStr(arg1);
-    size_t       len   = NUM2SIZET(arg2);
+    size_t       linelen = RSTRING_LEN(arg1);
+    ssize_t      slen  = NUM2SSIZET(arg2);
+    if (slen < 0) {
+        rb_raise(rb_eArgError, "len must not be negative");
+    }
+    size_t       len   = (size_t)slen;
     loglinetype  ltype = NUM2INT(arg3);
     // the values are parts of the line, they get its encoding
     rb_encoding *enc   = rb_enc_get(arg1);
+
+    // a len bigger than the line would make parse() read after its end: the
+    // line is parsed with its own length, and the error is reported
+    size_t givenlen = len;
+    int lenerr = len > linelen;
+    if (lenerr) {
+        len = linelen;
+    }
 
     logdata l;
     memset(&l, '\0', sizeof(logdata));
 
     parse(line, len, ltype, &l);
+    if (lenerr) {
+        l.entry_is_broken = 1;
+    }
 
     VALUE result = rb_hash_new();
 
@@ -108,7 +128,7 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
     rb_hash_aset(result, ID2SYM(rb_intern("log_uri")), rb_enc_str_new_cstr(l.log_uri, enc));
     rb_hash_aset(result, ID2SYM(rb_intern("log_unique_id")), rb_enc_str_new_cstr(l.log_unique_id, enc));
     rb_hash_aset(result, ID2SYM(rb_intern("log_server")), rb_enc_str_new_cstr(l.log_server, enc));
-    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_cnt")), INT2NUM(l.log_entry_errors_cnt));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_cnt")), INT2NUM(l.log_entry_errors_cnt + lenerr));
 
     VALUE errors = rb_ary_new();
     VALUE errorspos = rb_ary_new();
@@ -121,6 +141,12 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
             rb_ary_push(errors, rb_enc_str_new_cstr(logerr.errmsg, enc));
             rb_ary_push(errorspos, rb_ary_new3(2, SIZET2NUM(*logerr.startpos), SIZET2NUM(*logerr.endpos)));
         }
+    }
+    if (lenerr) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), MSCLEN_ERROR_FMT, givenlen, linelen);
+        rb_ary_push(errors, rb_enc_str_new_cstr(msg, enc));
+        rb_ary_push(errorspos, rb_ary_new3(2, SIZET2NUM(linelen), SIZET2NUM(givenlen)));
     }
     rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors")), errors);
     rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_pos")), errorspos);

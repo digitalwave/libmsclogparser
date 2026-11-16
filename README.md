@@ -694,6 +694,8 @@ As you can see above, in the available bindings (Lua, PHP, Python, Ruby) there i
 
 In Python, the line can be a `str` or a `bytes` object, and its length is given in bytes. If the line is `bytes`, the values of the fields are `bytes` too, so a line that isn't valid UTF-8 can be parsed without decoding it.
 
+The second argument of `parse()` is the length of the line in bytes. If it's bigger than the line, the bindings parse the whole line (they never read after its end), set `entry_is_broken`, and add an error to `log_entry_errors`, eg. `The given length (816) is bigger than the line (716 bytes)!`, its positions in `log_entry_errors_pos` are the length of the line and the given length. A negative length raises an error (`ValueError` in Python and PHP, `ArgumentError` in Ruby, a Lua error).
+
 Note, that the PHP script runs with this command (after build and install):
 ```bash
 php -d extension=mscphplogparser bindings/phptest.php /path/to/log apache

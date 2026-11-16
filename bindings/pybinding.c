@@ -54,6 +54,10 @@ modsecurity@digitalwave.hu
 
 #define MODULE_VERSION "2.0.0"
 
+// the len argument is bigger than the line: the line is parsed with its own
+// length, and this error is added
+#define MSCLEN_ERROR_FMT "The given length (%zu) is bigger than the line (%zu bytes)!"
+
 static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log line.\n\n"
     "line is str or bytes, len is its length in bytes. The values of the fields\n"
     "are str if line is str, and bytes if line is bytes.";
@@ -80,12 +84,16 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
     PyObject     *lineobj = NULL;
     char         *line = NULL;
     Py_ssize_t    linelen = 0;
-    unsigned long len;
+    Py_ssize_t    len;
     int           ltype;
     logdata       l;
 
     // PyArg_ParseTuple() sets the exception that tells what is wrong
-    if (!PyArg_ParseTuple(args, "Oki", &lineobj, &len, &ltype)) {
+    if (!PyArg_ParseTuple(args, "Oni", &lineobj, &len, &ltype)) {
+        return NULL;
+    }
+    if (len < 0) {
+        PyErr_SetString(PyExc_ValueError, "len must not be negative");
         return NULL;
     }
 
@@ -110,6 +118,14 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
     if (strlen(line) != (size_t)linelen) {
         PyErr_SetString(PyExc_ValueError, "embedded null character");
         return NULL;
+    }
+
+    // a len bigger than the line would make parse() read after its end: the
+    // line is parsed with its own length, and the error is reported
+    size_t givenlen = (size_t)len;
+    int lenerr = givenlen > (size_t)linelen;
+    if (lenerr) {
+        len = linelen;
     }
 
     memset(&l, '\0', sizeof(logdata));
@@ -143,6 +159,17 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
                 goto cleanup;
             }
         }
+    }
+
+    if (lenerr) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), MSCLEN_ERROR_FMT, givenlen, (size_t)linelen);
+        if (list_append_new(errors, Py_BuildValue("s", msg)) < 0 ||
+            list_append_new(errorspos, Py_BuildValue("[k,k]", (unsigned long)linelen, (unsigned long)givenlen)) < 0) {
+            goto cleanup;
+        }
+        l.entry_is_broken = 1;
+        l.log_entry_errors_cnt++;
     }
 
     rv = Py_BuildValue(as_bytes ? MSCPY_RESULT_FORMAT("y") : MSCPY_RESULT_FORMAT("s"),
