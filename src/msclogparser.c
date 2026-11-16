@@ -1531,6 +1531,14 @@ int parse (const char * line, size_t len, loglinetype t, logdata * l) {
     while (len > 0 && (line[len-1] == '\0' || line[len-1] == '\n' || line[len-1] == '\r')) {
         len--;
     }
+    if (t != LOG_TYPE_APACHE && t != LOG_TYPE_NGINX) {
+        // unknown type: parse an empty line to initialize the fields, and report it
+        l->linebuf[0] = '\0';
+        parse_copy(l->linebuf, 0, LOG_TYPE_APACHE, l);
+        l->log_entry_raw_length = len;
+        set_error(l, "Unknown log type!", 0, len);
+        return 1;
+    }
     if (len >= sizeof(l->linebuf)) {
         // too long: parse an empty line to initialize the fields, and report it;
         // a ModSecurity line is still marked as one (with the same check as in

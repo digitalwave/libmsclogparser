@@ -825,10 +825,29 @@ static void test_line_too_long(void) {
     free(head);
 }
 
+// an unknown log type isn't parsed, it's reported
+static void test_unknown_type(void) {
+    logdata l;
+    char *s = cat(AP_HEAD, "Warning. x.", FIELDS, AP_TAIL, NULL);
+    int types[] = { -1, 2, 9 };
+    for (int i = 0; i < 3; i++) {
+        memset(&l, 0xa5, sizeof(logdata));
+        int rc = parse(s, strlen(s), (loglinetype)types[i], &l);
+        CHECK(rc == 1 && l.entry_is_broken == 1 && l.log_entry_errors_cnt == 1 && has_error(&l, "Unknown log type!"),
+              "type %d: rc=%d broken=%d errors=%d", types[i], rc, l.entry_is_broken, l.log_entry_errors_cnt);
+        CHECK(l.entry_is_modsecline == 0 && l.log_entry_raw_length == strlen(s), "type %d: modsecline=%d length %zu",
+              types[i], l.entry_is_modsecline, l.log_entry_raw_length);
+        check_invariants("unknown type", &l);
+        check_errors("unknown type", &l);
+    }
+    free(s);
+}
+
 int main(void) {
     test_line_not_modified();
     test_line_too_long();
     test_reuse_logdata();
+    test_unknown_type();
     test_regular_lines();
     test_long_message();
     test_many_tags();

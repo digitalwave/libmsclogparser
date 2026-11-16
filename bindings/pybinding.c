@@ -96,6 +96,10 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         PyErr_SetString(PyExc_ValueError, "len must not be negative");
         return NULL;
     }
+    if (ltype != LOG_TYPE_APACHE && ltype != LOG_TYPE_NGINX) {
+        PyErr_SetString(PyExc_ValueError, "ltype must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
+        return NULL;
+    }
 
     // a bytes line can be parsed without decoding it, eg. if it isn't valid UTF-8
     int as_bytes = PyBytes_Check(lineobj);

@@ -189,7 +189,8 @@ void read_msclog_err(msclogpool *pool, msclogerr *err);
 // parses the first len bytes of line; line doesn't have to be NUL terminated,
 // and it isn't modified; a line of MSCLOG_LINE_BUFF_SIZE bytes or longer (without
 // the line ending) isn't parsed, it's an error (the fields are empty, but
-// entry_is_modsecline is set for a ModSecurity line); l doesn't have to be cleared before the call, it can be
+// entry_is_modsecline is set for a ModSecurity line); an unknown t is an error
+// too, the fields are empty; l doesn't have to be cleared before the call, it can be
 // reused for every line
 int parse (const char * line, size_t len, loglinetype t, logdata * l);
 

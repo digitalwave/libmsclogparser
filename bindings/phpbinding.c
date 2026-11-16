@@ -104,6 +104,10 @@ PHP_FUNCTION(parse)
         zend_argument_value_error(2, "must not be negative");
         RETURN_THROWS();
     }
+    if (ltype != LOG_TYPE_APACHE && ltype != LOG_TYPE_NGINX) {
+        zend_argument_value_error(3, "must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
+        RETURN_THROWS();
+    }
 
     // a len bigger than the line would make parse() read after its end: the
     // line is parsed with its own length, and the error is reported

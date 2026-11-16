@@ -66,7 +66,11 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
         rb_raise(rb_eArgError, "len must not be negative");
     }
     size_t       len   = (size_t)slen;
-    loglinetype  ltype = NUM2INT(arg3);
+    int          itype = NUM2INT(arg3);
+    if (itype != LOG_TYPE_APACHE && itype != LOG_TYPE_NGINX) {
+        rb_raise(rb_eArgError, "ltype must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
+    }
+    loglinetype  ltype = (loglinetype)itype;
     // the values are parts of the line, they get its encoding
     rb_encoding *enc   = rb_enc_get(arg1);
 

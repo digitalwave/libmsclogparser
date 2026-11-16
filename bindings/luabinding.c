@@ -70,7 +70,10 @@ static int msclualogparser_parse (lua_State *L) {
     lua_Integer ilen = luaL_checkinteger(L, 2);
     luaL_argcheck(L, ilen >= 0, 2, "len must not be negative");
     size_t len = (size_t)ilen;
-    loglinetype ltype = (loglinetype)luaL_checkinteger(L, 3);
+    lua_Integer itype = luaL_checkinteger(L, 3);
+    luaL_argcheck(L, itype == LOG_TYPE_APACHE || itype == LOG_TYPE_NGINX, 3,
+                  "must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
+    loglinetype ltype = (loglinetype)itype;
 
     // a len bigger than the line would make parse() read after its end: the
     // line is parsed with its own length, and the error is reported
