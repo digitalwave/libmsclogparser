@@ -5,8 +5,8 @@ v3.0.0 - 2026-11-16
     first len bytes, and the line doesn't have to be terminated
     (before it wrote a '\0' to line[len], which changed the script
     strings in the bindings, and crashed PHP with opcache)
-  * A line of 8192 (MSCLOG_LINE_BUFF_SIZE) bytes or longer isn't
-    parsed, it's reported as an error
+  * A line of 8192 (MSCLOG_LINE_BUFF_SIZE) bytes or longer (without
+    the line ending) isn't parsed, it's reported as an error
   * parse() initializes the logdata: the caller doesn't have to
     clear it before every line, the bindings don't clear it anymore
   * Fix: don't store a part of a UTF-8 character when a field is

@@ -1509,6 +1509,11 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 // reuse the same logdata for every line without clearing it.
 int parse (const char * line, size_t len, loglinetype t, logdata * l) {
     memset(l, '\0', offsetof(logdata, datapool));
+    // the line ending doesn't count in the limit: remove it before the check
+    // (parse_copy() removes the same characters)
+    while (len > 0 && (line[len-1] == '\0' || line[len-1] == '\n' || line[len-1] == '\r')) {
+        len--;
+    }
     if (len >= sizeof(l->linebuf)) {
         // too long: parse an empty line to initialize the fields, and report it
         l->linebuf[0] = '\0';

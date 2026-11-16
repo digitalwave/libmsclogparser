@@ -748,7 +748,8 @@ static void test_reuse_logdata(void) {
 }
 
 // a line of MSCLOG_LINE_BUFF_SIZE bytes or longer isn't parsed, the fields are
-// empty, and it's reported; one byte shorter is parsed
+// empty, and it's reported; one byte shorter is parsed; the line ending doesn't
+// count
 static void test_line_too_long(void) {
     logdata l;
     char *head = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"", NULL);
@@ -777,6 +778,28 @@ static void test_line_too_long(void) {
         }
         free(s);
         free(v);
+    }
+
+    // the line ending doesn't count in the limit
+    const char *endings[] = { "\n", "\r\n", "\r\n\r\n" };
+    for (int e = 0; e < 3; e++) {
+        for (size_t total = MSCLOG_LINE_BUFF_SIZE - 1; total <= MSCLOG_LINE_BUFF_SIZE; total++) {
+            char *v = rep('x', total - fixed);
+            char *s = cat(head, v, tail, endings[e], NULL);
+            memset(&l, '\0', sizeof(logdata));
+            int rc = parse(s, strlen(s), LOG_TYPE_APACHE, &l);
+            int toolong = has_error(&l, "The line is too long, it can't be parsed!");
+            CHECK(l.log_entry_raw_length == total, "ending %d, %zu bytes: length %zu", e, total, l.log_entry_raw_length);
+            if (total < MSCLOG_LINE_BUFF_SIZE) {
+                CHECK(rc == 0 && !toolong, "ending %d, %zu bytes: rc=%d too long=%d", e, total, rc, toolong);
+                CHECKV(strcmp(l.log_unique_id, "u") == 0, "ending %d, %zu bytes: unique_id '%s'", e, total, l.log_unique_id);
+            }
+            else {
+                CHECK(rc == 1 && toolong, "ending %d, %zu bytes: rc=%d too long=%d", e, total, rc, toolong);
+            }
+            free(s);
+            free(v);
+        }
     }
     free(head);
 }
