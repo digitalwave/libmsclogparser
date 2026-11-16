@@ -748,8 +748,8 @@ static void test_reuse_logdata(void) {
 }
 
 // a line of MSCLOG_LINE_BUFF_SIZE bytes or longer isn't parsed, the fields are
-// empty, and it's reported; one byte shorter is parsed; the line ending doesn't
-// count
+// empty (but a ModSecurity line is marked as one), and it's reported; one byte
+// shorter is parsed; the line ending doesn't count
 static void test_line_too_long(void) {
     logdata l;
     char *head = cat(AP_HEAD, "Warning. x.", FIELDS, " [hostname \"h\"] [uri \"", NULL);
@@ -768,7 +768,7 @@ static void test_line_too_long(void) {
             CHECKV(strcmp(l.log_unique_id, "u") == 0, "%zu bytes: unique_id '%s'", total, l.log_unique_id);
         }
         else {
-            CHECK(rc == 1 && l.entry_is_broken == 1 && l.entry_is_modsecline == 0,
+            CHECK(rc == 1 && l.entry_is_broken == 1 && l.entry_is_modsecline == 1,
                    "%zu bytes: rc=%d broken=%d modsecline=%d", total, rc, l.entry_is_broken, l.entry_is_modsecline);
             CHECK(l.log_entry_errors_cnt == 1 && has_error(&l, "The line is too long, it can't be parsed!"),
                    "%zu bytes: errors %d", total, l.log_entry_errors_cnt);
@@ -779,6 +779,27 @@ static void test_line_too_long(void) {
         free(s);
         free(v);
     }
+
+    // a too long line that isn't a ModSecurity line, one with " ModSecurity:"
+    // at the end, and one where len cuts it (the bytes after len aren't read)
+    int rc;
+    char *other = rep('x', MSCLOG_LINE_BUFF_SIZE + 1);
+    memset(&l, '\0', sizeof(logdata));
+    rc = parse(other, MSCLOG_LINE_BUFF_SIZE, LOG_TYPE_APACHE, &l);
+    CHECK(rc == 1 && l.entry_is_modsecline == 0 && l.entry_is_broken == 1, "too long other line: rc=%d modsecline=%d",
+          rc, l.entry_is_modsecline);
+    memcpy(other + MSCLOG_LINE_BUFF_SIZE - 13, " ModSecurity:", 13);
+    memset(&l, '\0', sizeof(logdata));
+    rc = parse(other, MSCLOG_LINE_BUFF_SIZE, LOG_TYPE_NGINX, &l);
+    CHECK(rc == 1 && l.entry_is_modsecline == 1, "too long line, marker at the end: rc=%d modsecline=%d",
+          rc, l.entry_is_modsecline);
+    memset(other, 'x', MSCLOG_LINE_BUFF_SIZE + 1);
+    memcpy(other + MSCLOG_LINE_BUFF_SIZE - 12, " ModSecurity:", 13);
+    memset(&l, '\0', sizeof(logdata));
+    rc = parse(other, MSCLOG_LINE_BUFF_SIZE, LOG_TYPE_NGINX, &l);
+    CHECK(rc == 1 && l.entry_is_modsecline == 0, "too long line, marker cut by len: rc=%d modsecline=%d",
+          rc, l.entry_is_modsecline);
+    free(other);
 
     // the line ending doesn't count in the limit
     const char *endings[] = { "\n", "\r\n", "\r\n\r\n" };

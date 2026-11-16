@@ -1501,6 +1501,23 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
     return 0;
 }
 
+// 1 if the first len bytes of line contain the pattern; line doesn't have to be
+// terminated (memmem() isn't standard C)
+static int mscl_contains(const char *line, size_t len, const char *pattern, size_t plen) {
+    const char *p = line, *end = line + len;
+    while (plen > 0 && (size_t)(end - p) >= plen) {
+        p = memchr(p, pattern[0], (size_t)(end - p) - plen + 1);
+        if (p == NULL) {
+            return 0;
+        }
+        if (memcmp(p, pattern, plen) == 0) {
+            return 1;
+        }
+        p++;
+    }
+    return 0;
+}
+
 // The parser needs a line terminated with '\0', and it writes the '\0' to
 // line[len]. It works on a copy in l->linebuf, so the caller's line isn't
 // modified, and it doesn't have to be terminated. The values are stored in the
@@ -1515,10 +1532,13 @@ int parse (const char * line, size_t len, loglinetype t, logdata * l) {
         len--;
     }
     if (len >= sizeof(l->linebuf)) {
-        // too long: parse an empty line to initialize the fields, and report it
+        // too long: parse an empty line to initialize the fields, and report it;
+        // a ModSecurity line is still marked as one (with the same check as in
+        // parse_copy()), so the caller doesn't drop it as an unrelated line
         l->linebuf[0] = '\0';
         parse_copy(l->linebuf, 0, t, l);
         l->log_entry_raw_length = len;
+        l->entry_is_modsecline = mscl_contains(line, len, " ModSecurity:", 13);
         set_error(l, "The line is too long, it can't be parsed!", 0, len);
         return 1;
     }

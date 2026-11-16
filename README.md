@@ -61,7 +61,7 @@ The purpose of this project is to analyze the "always present" log output of Mod
 
 The writing of the code was preceded by thorough research. The expectation was that a method that knew all log formats and could recognize and show truncated (or duplicated) fields produced during known procedures.
 
-Even though the code is written in C, but it does not use any dynamic memory handling: `parse()` copies the line to a buffer in the `logdata` structure (`linebuf`), so a line of `MSCLOG_LINE_BUFF_SIZE` (8192) bytes or longer (without the line ending) can't be parsed, `parse()` reports an error for it. It also does not have any library dependecy (eg. PCRE/PCRE2). Therefore it's really fast and convenience to use it.
+Even though the code is written in C, but it does not use any dynamic memory handling: `parse()` copies the line to a buffer in the `logdata` structure (`linebuf`), so a line of `MSCLOG_LINE_BUFF_SIZE` (8192) bytes or longer (without the line ending) can't be parsed, `parse()` reports an error for it: the fields are empty, `entry_is_broken` is 1, and `entry_is_modsecline` is 1 if it's a ModSecurity line. It also does not have any library dependecy (eg. PCRE/PCRE2). Therefore it's really fast and convenience to use it.
 
 ## Licensing
 
