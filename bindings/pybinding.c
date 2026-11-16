@@ -54,7 +54,16 @@ modsecurity@digitalwave.hu
 
 #define MODULE_VERSION "2.0.0"
 
-static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log.";
+static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log line.\n\n"
+    "line is str or bytes, len is its length in bytes. The values of the fields\n"
+    "are str if line is str, and bytes if line is bytes.";
+
+// the result: the values of the fields are S, "s" (str) or "y" (bytes)
+#define MSCPY_RESULT_FORMAT(S) \
+    "{s:i,s:i,s:k,s:" S ",s:f,s:" S ",s:i,s:" S ",s:k," \
+    "s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S "," \
+    "s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S "," \
+    "s:k,s:O,s:" S ",s:" S ",s:" S ",s:" S ",s:i,s:O,s:O}"
 
 // append a new reference to the list, and release it
 // returns -1 (with the exception set) if item is NULL or the append fails
@@ -68,13 +77,38 @@ static int list_append_new(PyObject *list, PyObject *item) {
 }
 
 static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
+    PyObject     *lineobj = NULL;
     char         *line = NULL;
+    Py_ssize_t    linelen = 0;
     unsigned long len;
     int           ltype;
     logdata       l;
 
     // PyArg_ParseTuple() sets the exception that tells what is wrong
-    if (!PyArg_ParseTuple(args, "ski", &line, &len, &ltype)) {
+    if (!PyArg_ParseTuple(args, "Oki", &lineobj, &len, &ltype)) {
+        return NULL;
+    }
+
+    // a bytes line can be parsed without decoding it, eg. if it isn't valid UTF-8
+    int as_bytes = PyBytes_Check(lineobj);
+    if (as_bytes) {
+        if (PyBytes_AsStringAndSize(lineobj, &line, &linelen) < 0) {
+            return NULL;
+        }
+    }
+    else if (PyUnicode_Check(lineobj)) {
+        line = (char *)PyUnicode_AsUTF8AndSize(lineobj, &linelen);
+        if (line == NULL) {
+            return NULL;
+        }
+    }
+    else {
+        PyErr_Format(PyExc_TypeError, "argument 1 must be str or bytes, not %.200s",
+                     Py_TYPE(lineobj)->tp_name);
+        return NULL;
+    }
+    if (strlen(line) != (size_t)linelen) {
+        PyErr_SetString(PyExc_ValueError, "embedded null character");
         return NULL;
     }
 
@@ -92,7 +126,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
     }
 
     for(size_t i = 0; i < l.log_rule_tags_cnt; i++) {
-        if (list_append_new(tags, Py_BuildValue("s", l.log_rule_tags)) < 0) {
+        if (list_append_new(tags, Py_BuildValue(as_bytes ? "y" : "s", l.log_rule_tags)) < 0) {
             goto cleanup;
         }
         l.log_rule_tags += strlen(l.log_rule_tags) + 1;
@@ -111,7 +145,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         }
     }
 
-    rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:k,s:O,s:s,s:s,s:s,s:s,s:i,s:O,s:O}",
+    rv = Py_BuildValue(as_bytes ? MSCPY_RESULT_FORMAT("y") : MSCPY_RESULT_FORMAT("s"),
         "entry_is_modsecline",        l.entry_is_modsecline,
         "entry_is_broken",            l.entry_is_broken,
         "log_entry_raw_length",       (unsigned long)l.log_entry_raw_length,

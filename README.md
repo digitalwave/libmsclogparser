@@ -692,6 +692,8 @@ Note: this method is not available in bindings, because the errors are expanded.
 
 As you can see above, in the available bindings (Lua, PHP, Python, Ruby) there is only one function exists, the `parse()`. For more details, please see the tests scripts under the `bindings/` directory.
 
+In Python, the line can be a `str` or a `bytes` object, and its length is given in bytes. If the line is `bytes`, the values of the fields are `bytes` too, so a line that isn't valid UTF-8 can be parsed without decoding it.
+
 Note, that the PHP script runs with this command (after build and install):
 ```bash
 php -d extension=mscphplogparser bindings/phptest.php /path/to/log apache
