@@ -15,12 +15,14 @@ v3.0.0 - 2026-11-16
     [unique_id], ...; the end of the ModSecurity part is the context
     right after its last field (with an optional ' while ACTION' on
     Nginx), if there are more such places (a fake one), or the only
-    one is followed by fields on a line cut by Nginx, the fields
+    one is followed by fields on an Apache line or a line cut by
+    Nginx (the real context can be missing there), the fields
     aren't used (only the class and the message are kept), and an
     error is reported - also if the ModSecurity part contains more
-    than one [file] or [id]; Nginx log_client and log_server are used only
-    if their part is right after the ModSecurity part (or after the
-    message of a line without fields), otherwise a warning says why
+    than one [file] or [id]; Nginx log_client and log_server are used
+    if their part is right after the ModSecurity part, even if fake
+    ones follow it (or the only one after the message of a line
+    without fields), otherwise a warning says why
   * Fix: [uri] and [unique_id] are searched after [hostname], not
     from the beginning of the line (a '[uri "' in the message
     replaced the real [uri]); if the ModSecurity part contains more

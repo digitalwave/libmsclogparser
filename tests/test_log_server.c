@@ -10,9 +10,12 @@ nginx appends its context to the ModSecurity message
   , client: ADDR, server: NAME[, request: "LINE"][, ...][, host: "HOST"][, referrer: "REF"]
 The quoted values are not escaped, so a fake ", client: X, server: Y" can
 come both before (matched value, [uri]) and after (request line, host,
-referrer) the real one. The rule: exactly one ", client: ADDR, server: "
-in the line -> its ADDR and NAME; otherwise empty strings and exactly one
-error message (ambiguous or truncated line). Parsing continues either way.
+referrer) the real one. The rule: the context right after the last field
+of the ModSecurity part (the single candidate) is the real one, and its ADDR
+and NAME are used, whatever follows it; without such a context exactly one
+", client: ADDR, server: " in the line -> its ADDR and NAME; otherwise
+empty strings and exactly one error message (ambiguous or truncated line).
+Parsing continues either way.
 
 test_fake_fields_in_context(): the ModSecurity fields ([file], [id],
 [hostname], [unique_id], ...) are searched only before the context (nginx)
@@ -87,27 +90,23 @@ static const server_case cases[] = {
     { .name = "no request field, host after server",
       .suffix = ", client: 192.0.2.10, server: _, host: \"a.example.test\"",
       .server = "_", .modsecline = -1, .broken = -1 },
-    // a full fake ", client: X, server: Y": never the fake, empty, not an error
+    // a full fake ", client: X, server: Y": never the fake; the real context
+    // (right after the last field) is used
     { .name = "fake client+server in the matched value",
       .value = "1" FAKE "\"x", .suffix = REAL,
-      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
-      .error = ERR_AMBIGUOUS },
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
     { .name = "fake client+server in the uri",
       .uri = "/a\"]" FAKE "\"x", .suffix = REAL,
-      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
-      .error = ERR_AMBIGUOUS },
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
     { .name = "fake client+server in the request line",
       .suffix = ", client: 192.0.2.10, server: www.example.test, request: \"GET /?q=1" FAKE "\"x HTTP/1.1\"",
-      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
-      .error = ERR_AMBIGUOUS },
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
     { .name = "fake client+server in the referrer",
       .suffix = REAL ", referrer: \"x" FAKE "\"y\"",
-      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
-      .error = ERR_AMBIGUOUS },
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
     { .name = "fake client+server in the host",
       .suffix = REAL ", host: \"x" FAKE "\"y\"",
-      .server = "", .client_exp = "", .modsecline = -1, .broken = -1,
-      .error = ERR_AMBIGUOUS },
+      .server = "www.example.test", .client_exp = "192.0.2.10", .modsecline = -1, .broken = -1 },
     // only ", server: .." without a ", client: ADDR" before it: not a candidate
     { .name = "server fragment in the matched value",
       .value = "1, server: evil.example.test, request: \"x", .suffix = REAL,
@@ -252,7 +251,7 @@ static const fake_fields_case fake_cases[] = {
     { "nginx, fake context in the matched value", LOG_TYPE_NGINX,
       "1, client: 192.0.2.66, server: evil.example.test", "www.example.test",
       REAL ", referrer: \"x" NGX_FAKE_TAIL "\"",
-      "www.example.test", "168142074224.426959", "" },
+      "www.example.test", "168142074224.426959", "www.example.test" },
     // no context at all (eg. nginx cut the line before it): a fake marker in the
     // message doesn't hide the fields
     { "nginx, no context, fake context in the matched value", LOG_TYPE_NGINX,
@@ -272,9 +271,11 @@ static const fake_fields_case fake_cases[] = {
     { "nginx, empty hostname, fake host in the request line", LOG_TYPE_NGINX, "1", "",
       ", client: 192.0.2.10, server: www.example.test, request: \"GET /x\", host: \"evil\" HTTP/1.1\", host: \"real.example.test\"",
       "", "168142074224.426959", "www.example.test", 0, 0, NULL, 1 },
+    // Apache doesn't write a referer without a Referer header, so the real
+    // context can be missing, and fields after the only one make it ambiguous
     { "apache, fake fields in the referer", LOG_TYPE_APACHE, NULL, NULL,
       ", referer: " AP_FAKE_TAIL,
-      "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
+      "", "", NULL, 1 },
     { "apache, fake fields and referer in the referer", LOG_TYPE_APACHE, NULL, NULL,
       ", referer: " AP_FAKE_TAIL ", referer: x",
       "", "", NULL, 1 },
@@ -392,6 +393,35 @@ static void test_fake_context_special(void) {
     CHECK(l.log_client[0] == '\0' && has_error(&l, "client, server: not right after the fields, values not used")
           && l.entry_is_broken == 0 && strcmp(l.log_rule_id, "942100") == 0,
           "context not after the fields: client '%s' broken %d", l.log_client, l.entry_is_broken);
+
+    // Apache without a Referer header: no real context, a fake one in the
+    // matched value is the only candidate, but the real fields follow it
+    snprintf(line, sizeof(line), "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] "
+             "[client 192.0.2.10:1234] ModSecurity: Warning. Matched \"Operator `Rx' with parameter `x' against "
+             "variable `ARGS:q' (Value: `x\"] [file \"/evil.conf\"] [line \"1\"] [id \"1\"] [msg \"evil\"] "
+             "[hostname \"evil\"] [uri \"/evil\"] [unique_id \"EVIL\"] [ref \"\"], referer: z' ) "
+             "[file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"10\"] [id \"942100\"] [msg \"SQL Injection\"] "
+             "[hostname \"www.example.test\"] [uri \"/\"] [unique_id \"Zc3-aHFzNBf8HIsK4ZQ\"]");
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_APACHE, &l);
+    CHECK(l.entry_is_broken == 1 && has_error(&l, ERR_AMBIGUOUS_PART), "apache, no referer: broken %d", l.entry_is_broken);
+    CHECK(l.log_rule_file[0] == '\0' && l.log_rule_id[0] == '\0' && l.log_hostname[0] == '\0'
+          && l.log_unique_id[0] == '\0', "apache, no referer: file '%s' id '%s' host '%s' uid '%s'", l.log_rule_file,
+          l.log_rule_id, l.log_hostname, l.log_unique_id);
+    CHECK(l.log_entry_class == LOGMSG_WARNING && strcmp(l.log_client, "192.0.2.10:1234") == 0,
+          "apache, no referer: class %d client '%s'", l.log_entry_class, l.log_client);
+
+    // an '[id "' in the matched value: the fields aren't used (more [id]),
+    // but the end of the part is the real context, so client and server are
+    snprintf(line, sizeof(line), "%sq' (Value: `x[id \"1\"]%s, client: 192.0.2.10, server: www.example.test", head,
+             fields);
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_NGINX, &l);
+    CHECK(l.entry_is_broken == 1
+          && has_error(&l, "More [file] or [id] fields in the ModSecurity part, the fields aren't used!")
+          && l.log_rule_id[0] == '\0', "fake [id]: broken %d id '%s'", l.entry_is_broken, l.log_rule_id);
+    CHECK(strcmp(l.log_client, "192.0.2.10") == 0 && strcmp(l.log_server, "www.example.test") == 0,
+          "fake [id]: client '%s' server '%s'", l.log_client, l.log_server);
 
     // a message without fields: log_client and log_server come from its context
     snprintf(line, sizeof(line), "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Request body processing "

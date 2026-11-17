@@ -881,10 +881,11 @@ static void set_warning(logdata *l, const char *errmsg, size_t pos0, size_t pos1
 
 // ctxpos: the position of the real context (modsec_part_end()), or the length
 // of the line if it isn't known; valid: the number of the ', client: ADDR,
-// server: ' parts (modsec_part_end() counts them); the one must be at ctxpos,
-// so a fake one in the message isn't used if the real context is missing (eg.
-// the line was cut before it)
-static void parse_ngx_context(char *line, size_t ctxpos, int valid, logdata *l) {
+// server: ' parts (modsec_part_end() counts them); trusted: ctxpos is the
+// single candidate (right after the last field), it's used whatever valid is;
+// otherwise the one valid part must be at ctxpos, so a fake one in the message
+// isn't used if the real context is missing (eg. the line was cut before it)
+static void parse_ngx_context(char *line, size_t ctxpos, int valid, int trusted, logdata *l) {
 
     size_t addrpos, addrend, valpos, k;
 
@@ -892,13 +893,18 @@ static void parse_ngx_context(char *line, size_t ctxpos, int valid, logdata *l) 
         set_warning(l, "client, server: line truncated, values not used", 0, l->log_entry_raw_length);
         return;
     }
-    if (valid > 1) {
-        set_warning(l, "client, server: ambiguous context, values not used", 0, l->log_entry_raw_length);
-        return;
-    }
-    // the one ', client: ADDR, server: ' must be the real context
-    if (valid != 1 || ctxpos >= l->log_entry_raw_length) {
-        return;
+    // a trusted context (the single candidate after the last field) is used,
+    // even if there are more ', client: ' parts (fakes after it); otherwise
+    // (eg. a message without fields) the one ', client: ADDR, server: ' must
+    // be at ctxpos
+    if (!trusted) {
+        if (valid > 1) {
+            set_warning(l, "client, server: ambiguous context, values not used", 0, l->log_entry_raw_length);
+            return;
+        }
+        if (valid != 1 || ctxpos >= l->log_entry_raw_length) {
+            return;
+        }
     }
 
     addrpos = k = ctxpos + 10;
@@ -1305,10 +1311,13 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
 // trusted: if there is more than one, the end of the ModSecurity part is
 // ambiguous, and the fields aren't used (an injection can hide the fields,
 // but can't replace them); the class and the message are kept.
-// nginx cuts the line at NGX_MAX_ERROR_STR, and then the real context can be
-// lost, while a fake one in the message remains as the only candidate; but
-// in the message the rest of the real message follows it, with its fields:
-// a single candidate of a cut line is ambiguous if a field follows it.
+// The real context can be missing: Apache doesn't write ', referer: '
+// without a Referer header, and nginx cuts the line at NGX_MAX_ERROR_STR;
+// then a fake one in the message can be the only candidate. But it's followed
+// by the rest of the real message, with its fields: so on these lines a
+// single candidate is ambiguous if a field follows it. An nginx line that
+// isn't cut always has its context, so its single candidate is the real one,
+// and fields after it are fakes in the context, which aren't searched.
 typedef struct modsec_part {
     size_t fieldend;    // the end of the last field, the fields are before it
     size_t ctxpos;      // the position of the context marker, or len
@@ -1403,7 +1412,7 @@ static modsec_part modsec_part_end(const char *line, size_t from, size_t len, lo
     if (part.candidates > 1) {
         part.ambiguous = 1;
     }
-    else if (part.candidates == 1 && t == LOG_TYPE_NGINX && len >= NGX_MAX_ERROR_STR - 1) {
+    else if (part.candidates == 1 && (t == LOG_TYPE_APACHE || len >= NGX_MAX_ERROR_STR - 1)) {
         const char *after = line + part.ctxpos;
         if (strstr(after, " [file \"") != NULL || strstr(after, "[id \"") != NULL
             || strstr(after, "[unique_id \"") != NULL || strstr(after, "[ref \"") != NULL) {
@@ -1660,9 +1669,11 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // the message, or in the [uri] of libmodsecurity3), eg. on a line that
         // nginx cut right after a fake context, so that one is its only
         // candidate, and no field follows it
+        // (the end of the part is still trusted, so is the context after it)
         field_counts fc = count_fields(line + mpos + 13);
+        int fakefields = 0;
         if (!part.ambiguous && (fc.file > 1 || fc.id > 1)) {
-            part.ambiguous = 1;
+            fakefields = 1;
             set_error(l, "More [file] or [id] fields in the ModSecurity part, the fields aren't used!", mpos + 13,
                       partend);
         }
@@ -1700,7 +1711,7 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
             l->log_hostname = mscl_emptystr;
             l->log_uri = mscl_emptystr;
         }
-        if (part.ambiguous) {
+        if (part.ambiguous || fakefields) {
             // the fields of the rule and the tail may be fakes
             for (int f = LOGFIELD_LOG_RULE_FILE; f <= LOGFIELD_LOG_UNIQUE_ID; f++) {
                 l->fields[f] = mscl_emptystr;
@@ -1718,7 +1729,10 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
         if (t == LOG_TYPE_NGINX) {
             // log_client and log_server
-            parse_ngx_context(line, part.ambiguous ? len : part.ctxpos, part.valid, l);
+            // a single, not ambiguous candidate is the real context, even if
+            // there are more (fake) ', client: ' parts after it
+            parse_ngx_context(line, part.ambiguous ? len : part.ctxpos, part.valid,
+                              part.candidates == 1 && !part.ambiguous, l);
             // one ', client: ADDR, server: ', but not right after the fields
             // (eg. an unknown text between them): it isn't used, say why
             if (!part.ambiguous && part.valid == 1 && part.ctxpos >= len && len < NGX_MAX_ERROR_STR - 1) {
