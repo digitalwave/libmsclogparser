@@ -84,8 +84,8 @@ v3.0.0 - 2026-11-16
     (package version, pkg-config, SONAME), the Python package and the
     MODULE_VERSION of the bindings take it from there
   * Build: make uninstall removes the bindings (the Python module
-    from the site directories of the interpreter, the module is
-    installed with its pip), and make install of the Lua, Ruby and
+    from the one directory its pip installs into, the module is
+    installed with that pip), and make install of the Lua, Ruby and
     PHP bindings honors DESTDIR
   * Build: make doesn't rerun the autotools (AM_MAINTAINER_MODE), the
     committed generated files are used; run autoreconf -fi after a

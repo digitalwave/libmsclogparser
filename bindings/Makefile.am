@@ -13,14 +13,17 @@ PYTHON_INSTALL_CMD = $(PYTHON) -m pip install --root=$(DESTDIR)/ \
                 --ignore-installed \
                 --no-build-isolation .
 
-# pip installs the module and its dist-info into a site directory of the
-# interpreter (eg. /usr/local/lib/python3.X/dist-packages on Debian,
-# site-packages elsewhere; it depends on the scheme of pip), under DESTDIR:
-# they are removed from each of them
+# pip installs the module and its dist-info into one directory, by its own
+# scheme (eg. /usr/local/lib/python3.X/dist-packages on Debian): only that one
+# is cleaned under DESTDIR, so a module installed by something else (eg. a
+# distribution package in /usr/lib/python3/dist-packages) isn't removed. The
+# directory comes from pip itself, or from the default scheme of sysconfig if
+# that internal function isn't there.
+PYTHON_PIP_PLATLIB = from pip._internal.locations import get_scheme; print(get_scheme("mscpylogparser").platlib)
+PYTHON_SYSCONFIG_PLATLIB = import sysconfig; print(sysconfig.get_path("platlib"))
 uninstall-py:
-	for d in `$(PYTHON) -c "import site, sysconfig; print(' '.join(sorted(set([sysconfig.get_path('platlib'), sysconfig.get_path('purelib')] + site.getsitepackages()))))"`; do \
-	    rm -rf "$(DESTDIR)$$d"/mscpylogparser*; \
-	done
+	d=`$(PYTHON) -c '$(PYTHON_PIP_PLATLIB)' 2>/dev/null || $(PYTHON) -c '$(PYTHON_SYSCONFIG_PLATLIB)'` && \
+	test -n "$$d" && rm -rf "$(DESTDIR)$$d"/mscpylogparser*
 
 
 clean-py:
