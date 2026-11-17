@@ -51,7 +51,8 @@ v3.0.0 - 2026-11-16
     free its buffer)
   * Lua binding: new entry_is_broken, the constants are integers
   * PHP binding: fix the TSRM cache macro of ZTS builds, remove
-    unused variables
+    unused variables, the version of the module is MODULE_VERSION
+    (phpversion() said 1.0)
   * Python and Ruby test scripts pass the length in bytes
   * pkg-config file: the version and the paths come from configure
     (it said 0.3.0, and had a fixed libdir)

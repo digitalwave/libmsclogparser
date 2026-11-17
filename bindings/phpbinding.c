@@ -71,7 +71,7 @@ modsecurity@digitalwave.hu
 extern zend_module_entry mscphplogparser_module_entry;
 # define phpext_mscphplogparser_ptr &mscphplogparser_module_entry
 
-# define PHP_MSCPHPLOGPARSER_VERSION "1.0"
+# define PHP_MSCPHPLOGPARSER_VERSION MODULE_VERSION
 
 
 PHP_MINIT_FUNCTION(mscphplogparser);
