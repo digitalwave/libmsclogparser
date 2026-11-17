@@ -49,12 +49,24 @@ modsecurity@digitalwave.hu
 #include <stdio.h>
 #include <string.h>
 #include <Python.h>
-#include "../src/msclogparser.h"
+// the header of the source tree (-I../src in setup.py), or the installed one
+// when built from an sdist
+#include "msclogparser.h"
 
 
-#define MODULE_VERSION "2.0.0"
+// the version of the bindings is the version of the library
+#define MODULE_VERSION MSCLOGPARSER_VERSION
 
-static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log.";
+static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log line.\n\n"
+    "line is str or bytes, len is its length in bytes. The values of the fields\n"
+    "and the error messages are str if line is str, and bytes if line is bytes.";
+
+// the result: the values of the fields are S, "s" (str) or "y" (bytes)
+#define MSCPY_RESULT_FORMAT(S) \
+    "{s:i,s:i,s:K,s:" S ",s:f,s:" S ",s:i,s:" S ",s:K," \
+    "s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S "," \
+    "s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S "," \
+    "s:K,s:O,s:" S ",s:" S ",s:" S ",s:" S ",s:i,s:O,s:O}"
 
 // append a new reference to the list, and release it
 // returns -1 (with the exception set) if item is NULL or the append fails
@@ -68,19 +80,47 @@ static int list_append_new(PyObject *list, PyObject *item) {
 }
 
 static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
-    char       *line = NULL;
-    size_t      len;
-    loglinetype ltype;
-    logdata     l;
+    PyObject     *lineobj = NULL;
+    char         *line = NULL;
+    Py_ssize_t    linelen = 0;
+    Py_ssize_t    len;
+    int           ltype;
+    logdata       l;
 
-    if (!PyArg_ParseTuple(args, "ski", &line, &len, &ltype)) {
-        PyErr_SetString(PyExc_TypeError, "one or more argument missing.");
+    // PyArg_ParseTuple() sets the exception that tells what is wrong
+    if (!PyArg_ParseTuple(args, "Oni", &lineobj, &len, &ltype)) {
+        return NULL;
+    }
+    if (len < 0) {
+        PyErr_SetString(PyExc_ValueError, "len must not be negative");
+        return NULL;
+    }
+    if (ltype != LOG_TYPE_APACHE && ltype != LOG_TYPE_NGINX) {
+        PyErr_SetString(PyExc_ValueError, "ltype must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
         return NULL;
     }
 
-    memset(&l, '\0', sizeof(logdata));
+    // a bytes line can be parsed without decoding it, eg. if it isn't valid UTF-8
+    int as_bytes = PyBytes_Check(lineobj);
+    if (as_bytes) {
+        if (PyBytes_AsStringAndSize(lineobj, &line, &linelen) < 0) {
+            return NULL;
+        }
+    }
+    else if (PyUnicode_Check(lineobj)) {
+        line = (char *)PyUnicode_AsUTF8AndSize(lineobj, &linelen);
+        if (line == NULL) {
+            return NULL;
+        }
+    }
+    else {
+        PyErr_Format(PyExc_TypeError, "argument 1 must be str or bytes, not %.200s",
+                     Py_TYPE(lineobj)->tp_name);
+        return NULL;
+    }
 
-    parse(line, len, ltype, &l);
+    // a len bigger than the line is reported by parse_checked()
+    parse_checked(line, (size_t)linelen, (size_t)len, (loglinetype)ltype, &l);
 
     PyObject *tags = PyList_New(0);
     PyObject *errors = PyList_New(0);
@@ -92,7 +132,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
     }
 
     for(size_t i = 0; i < l.log_rule_tags_cnt; i++) {
-        if (list_append_new(tags, Py_BuildValue("s", l.log_rule_tags)) < 0) {
+        if (list_append_new(tags, Py_BuildValue(as_bytes ? "y" : "s", l.log_rule_tags)) < 0) {
             goto cleanup;
         }
         l.log_rule_tags += strlen(l.log_rule_tags) + 1;
@@ -104,23 +144,23 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         msclogerr logerr;
         for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
-            if (list_append_new(errors, Py_BuildValue("s", logerr.errmsg)) < 0 ||
-                list_append_new(errorspos, Py_BuildValue("[k,k]", *logerr.startpos, *logerr.endpos)) < 0) {
+            if (list_append_new(errors, Py_BuildValue(as_bytes ? "y" : "s", logerr.errmsg)) < 0 ||
+                list_append_new(errorspos, Py_BuildValue("[K,K]", (unsigned long long)*logerr.startpos, (unsigned long long)*logerr.endpos)) < 0) {
                 goto cleanup;
             }
         }
     }
 
-    rv = Py_BuildValue("{s:i,s:i,s:k,s:s,s:f,s:s,s:i,s:s,s:k,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:s,s:i,s:O,s:s,s:s,s:s,s:s,s:i,s:O,s:O}",
+    rv = Py_BuildValue(as_bytes ? MSCPY_RESULT_FORMAT("y") : MSCPY_RESULT_FORMAT("s"),
         "entry_is_modsecline",        l.entry_is_modsecline,
         "entry_is_broken",            l.entry_is_broken,
-        "log_entry_raw_length",       l.log_entry_raw_length,
+        "log_entry_raw_length",       (unsigned long long)l.log_entry_raw_length,
         "log_date_iso",               l.log_date_iso,
         "log_date_timestamp",         l.log_date_timestamp,
         "log_client",                 l.log_client,
-        "log_entry_class",            l.log_entry_class,
+        "log_entry_class",            (int)l.log_entry_class,
         "log_modsec_msg",             l.log_modsec_msg,
-        "log_modsec_msg_length",      l.log_modsec_msg_length,
+        "log_modsec_msg_length",      (unsigned long long)l.log_modsec_msg_length,
         "log_modsec_reason",          l.log_modsec_reason,
         "log_modsec_operator",        l.log_modsec_operator,
         "log_modsec_operand",         l.log_modsec_operand,
@@ -137,7 +177,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         "log_rule_version",           l.log_rule_version,
         "log_rule_maturity",          l.log_rule_maturity,
         "log_rule_accuracy",          l.log_rule_accuracy,
-        "log_rule_tags_cnt",          l.log_rule_tags_cnt,
+        "log_rule_tags_cnt",          (unsigned long long)l.log_rule_tags_cnt,
         "log_rule_tags",              tags,
         "log_hostname",               l.log_hostname,
         "log_uri",                    l.log_uri,
@@ -173,6 +213,9 @@ static struct PyModuleDef mscpylogparser = {
 PyMODINIT_FUNC PyInit_mscpylogparser(void) {
 
     PyObject *module = PyModule_Create(&mscpylogparser);
+    if (module == NULL) {
+        return NULL;
+    }
 
     PyModule_AddIntConstant(module, "LOG_TYPE_APACHE", LOG_TYPE_APACHE);
     PyModule_AddIntConstant(module, "LOG_TYPE_NGINX", LOG_TYPE_NGINX);

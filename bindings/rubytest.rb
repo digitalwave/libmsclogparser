@@ -2,17 +2,17 @@
 
 require RbConfig::CONFIG['vendorarchdir'] + '/mscrubylogparser'
 
-#puts LOG_TYPE_APACHE
-#puts LOG_TYPE_NGINX
-#puts LOGMSG_UNKNOWN
-#puts LOGMSG_WARNING
-#puts LOGMSG_ACCDENIED
-#puts LOGMSG_REQBODY
-#puts LOGMSG_ERROR
-#puts LOGMSG_AUDITLOG
+#puts MscRubyLogParser::LOG_TYPE_APACHE
+#puts MscRubyLogParser::LOG_TYPE_NGINX
+#puts MscRubyLogParser::LOGMSG_UNKNOWN
+#puts MscRubyLogParser::LOGMSG_WARNING
+#puts MscRubyLogParser::LOGMSG_ACCDENIED
+#puts MscRubyLogParser::LOGMSG_REQBODY
+#puts MscRubyLogParser::LOGMSG_ERROR
+#puts MscRubyLogParser::LOGMSG_AUDITLOG
 
-puts LIBRARY_VERSION
-puts MODULE_VERSION
+puts MscRubyLogParser::LIBRARY_VERSION
+puts MscRubyLogParser::MODULE_VERSION
 
 if ARGV.length < 2
     puts "Argument missing"
@@ -20,16 +20,16 @@ if ARGV.length < 2
 end
 
 if ARGV[1] == "apache"
-    logtype = LOG_TYPE_APACHE
+    logtype = MscRubyLogParser::LOG_TYPE_APACHE
 elsif ARGV[1] == "nginx"
-    logtype = LOG_TYPE_NGINX
+    logtype = MscRubyLogParser::LOG_TYPE_NGINX
 else
     puts "Unknown logtype"
     exit
 end
 
 File.readlines(ARGV[0]).each do |line|
-   result = parse(line, line.length, logtype)
+   result = MscRubyLogParser.parse(line, line.bytesize, logtype)
    puts result
    result = nil
 end
