@@ -1429,14 +1429,9 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
     size_t matches[2];
     int mcnt;
 
-    // catch the [client ...] fields
-    // first possible occurrance position of first [client ...] is 65
-    // only in case of Apache
-
-    // catch the [client ...] fields
+    // catch the [client ...] (or [remote ...]) field; its first possible
+    // position is 65
     memset(matches, '\0', sizeof(size_t)*2);
-    // first possible occurrance position of first [client ...] is 65
-    // only in case of Apache
     mcnt = find_pattern(line, 65, len, "[client ", 8, &matches, MATCH_FIRST);
     if (mcnt != 1) {
         mcnt = find_pattern(line, 65, len, "[remote ", 8, &matches, MATCH_FIRST);
@@ -1446,12 +1441,12 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
         }
     }
     size_t pos = matches[0] + matches[1];
-    memset(matches, '\0', sizeof(size_t)*2);
 
-    int ci = 0;
-    int k = pos;
+    // the value ends at the ']'
+    size_t ci = 0;
+    size_t k = pos;
     char client[50];
-    while(k < matches[0]-1 && k < len && line[k] != ']' && ci < sizeof(client)-1) {
+    while(k < len && line[k] != ']' && line[k] != '\0' && ci < sizeof(client)-1) {
         client[ci++] = line[k++];
     }
     if (k < len && line[k] != ']') {
