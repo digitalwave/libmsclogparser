@@ -383,6 +383,16 @@ static void test_fake_context_special(void) {
               "apache message %d: '%s' length %zu", m, l.log_modsec_msg, l.log_modsec_msg_length);
     }
 
+    // one context, but not right after the last field: not used, and a warning
+    // (the line isn't broken)
+    snprintf(line, sizeof(line), "%sq' (Value: `1%s something, client: 192.0.2.10, server: www.example.test, "
+             "request: \"GET / HTTP/1.1\"", head, fields);
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_NGINX, &l);
+    CHECK(l.log_client[0] == '\0' && has_error(&l, "client, server: not right after the fields, values not used")
+          && l.entry_is_broken == 0 && strcmp(l.log_rule_id, "942100") == 0,
+          "context not after the fields: client '%s' broken %d", l.log_client, l.entry_is_broken);
+
     // a message without fields: log_client and log_server come from its context
     snprintf(line, sizeof(line), "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Request body processing "
              "error, client: 192.0.2.10, server: www.example.test, request: \"GET / HTTP/1.1\", host: \"h\"");

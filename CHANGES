@@ -20,7 +20,7 @@ v3.0.0 - 2026-11-16
     error is reported - also if the ModSecurity part contains more
     than one [file] or [id]; Nginx log_client and log_server are used only
     if their part is right after the ModSecurity part (or after the
-    message of a line without fields)
+    message of a line without fields), otherwise a warning says why
   * Fix: [uri] and [unique_id] are searched after [hostname], not
     from the beginning of the line (a '[uri "' in the message
     replaced the real [uri]); if the ModSecurity part contains more

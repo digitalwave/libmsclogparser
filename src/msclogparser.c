@@ -1693,6 +1693,11 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         if (t == LOG_TYPE_NGINX) {
             // log_client and log_server
             parse_ngx_context(line, part.ambiguous ? len : part.ctxpos, part.valid, l);
+            // one ', client: ADDR, server: ', but not right after the fields
+            // (eg. an unknown text between them): it isn't used, say why
+            if (!part.ambiguous && part.valid == 1 && part.ctxpos >= len && len < NGX_MAX_ERROR_STR - 1) {
+                set_warning(l, "client, server: not right after the fields, values not used", 0, len);
+            }
             // classify the message only if the nginx context is in the line,
             // after the fields (toffset)
             size_t matches[2];
