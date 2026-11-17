@@ -61,10 +61,10 @@ static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSe
 
 // the result: the values of the fields are S, "s" (str) or "y" (bytes)
 #define MSCPY_RESULT_FORMAT(S) \
-    "{s:i,s:i,s:k,s:" S ",s:f,s:" S ",s:i,s:" S ",s:k," \
+    "{s:i,s:i,s:K,s:" S ",s:f,s:" S ",s:i,s:" S ",s:K," \
     "s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S "," \
     "s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S ",s:" S "," \
-    "s:k,s:O,s:" S ",s:" S ",s:" S ",s:" S ",s:i,s:O,s:O}"
+    "s:K,s:O,s:" S ",s:" S ",s:" S ",s:" S ",s:i,s:O,s:O}"
 
 // append a new reference to the list, and release it
 // returns -1 (with the exception set) if item is NULL or the append fails
@@ -143,7 +143,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         for (int c=0; c < l.log_entry_errors_cnt; c++) {
             read_msclog_err(&l.lineerrpool, &logerr);
             if (list_append_new(errors, Py_BuildValue(as_bytes ? "y" : "s", logerr.errmsg)) < 0 ||
-                list_append_new(errorspos, Py_BuildValue("[k,k]", (unsigned long)*logerr.startpos, (unsigned long)*logerr.endpos)) < 0) {
+                list_append_new(errorspos, Py_BuildValue("[K,K]", (unsigned long long)*logerr.startpos, (unsigned long long)*logerr.endpos)) < 0) {
                 goto cleanup;
             }
         }
@@ -152,13 +152,13 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
     rv = Py_BuildValue(as_bytes ? MSCPY_RESULT_FORMAT("y") : MSCPY_RESULT_FORMAT("s"),
         "entry_is_modsecline",        l.entry_is_modsecline,
         "entry_is_broken",            l.entry_is_broken,
-        "log_entry_raw_length",       (unsigned long)l.log_entry_raw_length,
+        "log_entry_raw_length",       (unsigned long long)l.log_entry_raw_length,
         "log_date_iso",               l.log_date_iso,
         "log_date_timestamp",         l.log_date_timestamp,
         "log_client",                 l.log_client,
         "log_entry_class",            (int)l.log_entry_class,
         "log_modsec_msg",             l.log_modsec_msg,
-        "log_modsec_msg_length",      (unsigned long)l.log_modsec_msg_length,
+        "log_modsec_msg_length",      (unsigned long long)l.log_modsec_msg_length,
         "log_modsec_reason",          l.log_modsec_reason,
         "log_modsec_operator",        l.log_modsec_operator,
         "log_modsec_operand",         l.log_modsec_operand,
@@ -175,7 +175,7 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         "log_rule_version",           l.log_rule_version,
         "log_rule_maturity",          l.log_rule_maturity,
         "log_rule_accuracy",          l.log_rule_accuracy,
-        "log_rule_tags_cnt",          (unsigned long)l.log_rule_tags_cnt,
+        "log_rule_tags_cnt",          (unsigned long long)l.log_rule_tags_cnt,
         "log_rule_tags",              tags,
         "log_hostname",               l.log_hostname,
         "log_uri",                    l.log_uri,
