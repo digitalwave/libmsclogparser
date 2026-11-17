@@ -423,6 +423,34 @@ static void test_fake_context_special(void) {
     CHECK(strcmp(l.log_client, "192.0.2.10") == 0 && strcmp(l.log_server, "www.example.test") == 0,
           "fake [id]: client '%s' server '%s'", l.log_client, l.log_server);
 
+    // Apache: the class is at the start of the message, not in the [uri]
+    snprintf(line, sizeof(line), "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] "
+             "[client 192.0.2.10:1234] ModSecurity: Access denied with code 403 (phase 2). Pattern match \"x\" "
+             "at ARGS:q. [file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"10\"] [id \"942100\"] "
+             "[msg \"SQL Injection\"] [hostname \"h\"] [uri \"/Warning.\"] [unique_id \"u\"]");
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_APACHE, &l);
+    CHECK(l.log_entry_class == LOGMSG_ACCDENIED && strcmp(l.log_rule_id, "942100") == 0 && l.entry_is_broken == 0,
+          "apache, Warning. in the uri: class %d id '%s' broken %d", l.log_entry_class, l.log_rule_id, l.entry_is_broken);
+    snprintf(line, sizeof(line), "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] "
+             "[client 192.0.2.10:1234] ModSecurity: Request body (Content-Length) is larger than the configured "
+             "limit (13107200). [hostname \"h\"] [uri \"/Rule\"] [unique_id \"u\"]");
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_APACHE, &l);
+    CHECK(l.log_entry_class == LOGMSG_REQBODY && strcmp(l.log_uri, "/Rule") == 0, "apache, Rule in the uri: class %d uri '%s'",
+          l.log_entry_class, l.log_uri);
+
+    // Apache: [client] is in the prefix, not in the message ([remote] in the
+    // prefix, a '[client ' in the uri)
+    snprintf(line, sizeof(line), "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] "
+             "[remote 192.0.2.100:51234] ModSecurity: Warning. Pattern match \"x\" at ARGS:q. "
+             "[file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"10\"] [id \"942100\"] [msg \"SQL Injection\"] "
+             "[hostname \"h\"] [uri \"/[client 6.6.6.6]\"] [unique_id \"u\"]");
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_APACHE, &l);
+    CHECK(l.entry_is_modsecline == 1 && strcmp(l.log_client, "192.0.2.100:51234") == 0,
+          "apache, [client in the uri: modsecline %d client '%s'", l.entry_is_modsecline, l.log_client);
+
     // a message without fields: log_client and log_server come from its context
     snprintf(line, sizeof(line), "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Request body processing "
              "error, client: 192.0.2.10, server: www.example.test, request: \"GET / HTTP/1.1\", host: \"h\"");

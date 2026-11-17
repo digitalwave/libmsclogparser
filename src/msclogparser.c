@@ -1422,6 +1422,44 @@ static modsec_part modsec_part_end(const char *line, size_t from, size_t len, lo
     return part;
 }
 
+// the first occurrence of the pattern in the first len bytes of line, or NULL;
+// line doesn't have to be terminated (memmem() isn't standard C)
+static const char * mscl_find(const char *line, size_t len, const char *pattern, size_t plen) {
+    const char *p = line, *end = line + len;
+    while (plen > 0 && (size_t)(end - p) >= plen) {
+        p = memchr(p, pattern[0], (size_t)(end - p) - plen + 1);
+        if (p == NULL) {
+            return NULL;
+        }
+        if (memcmp(p, pattern, plen) == 0) {
+            return p;
+        }
+        p++;
+    }
+    return NULL;
+}
+
+// the window of a pattern of n bytes at the start of the message
+#define MSG_START_WINDOW(n) ((n) + 6)
+
+// find_pattern() for the first match in line[pos, pos+window) (not after
+// len): find_pattern() uses strstr(), so it finds the first match after its
+// maxlen too
+static int find_in_window(const char *line, size_t pos, size_t window, size_t len, const char *pattern,
+                          size_t plen, size_t (*matches)[2]) {
+    size_t n = 0;
+    if (pos < len) {
+        n = (window < len - pos) ? window : len - pos;
+    }
+    const char *p = mscl_find(line + pos, n, pattern, plen);
+    if (p == NULL) {
+        return 0;
+    }
+    (*matches)[0] = (size_t)(p - line);
+    (*matches)[1] = plen;
+    return 1;
+}
+
 // the fields of an Apache line after ' ModSecurity:' (toffset); it returns 1
 // if the line can't be parsed
 static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l) {
@@ -1430,11 +1468,13 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
     int mcnt;
 
     // catch the [client ...] (or [remote ...]) field; its first possible
-    // position is 65
+    // position is 65, and it's in the prefix of Apache, before
+    // ' ModSecurity:' (toffset - 13), not in the message
     memset(matches, '\0', sizeof(size_t)*2);
-    mcnt = find_pattern(line, 65, len, "[client ", 8, &matches, MATCH_FIRST);
+    size_t prefixlen = (toffset - 13 > 65) ? toffset - 13 - 65 : 0;
+    mcnt = find_in_window(line, 65, prefixlen, len, "[client ", 8, &matches);
     if (mcnt != 1) {
-        mcnt = find_pattern(line, 65, len, "[remote ", 8, &matches, MATCH_FIRST);
+        mcnt = find_in_window(line, 65, prefixlen, len, "[remote ", 8, &matches);
         if (mcnt != 1) {
             set_error(l, "Can't find [client] or [remote] field!", 0, len);
             return 1;
@@ -1466,9 +1506,12 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
     // based on next substring it determines what do we have to look for
 
     // structure of Warning and Access lines are the same
-    mcnt = find_pattern(line, toffset, toffset+10, "Warning.", 8, &matches, MATCH_FIRST);
+    // the class is at the start of the message: in the first few bytes after
+    // ' ModSecurity:' (MSG_START_WINDOW: the pattern, and room for a ' ' and a
+    // character before it), not anywhere in it, eg. in the [uri]
+    mcnt = find_in_window(line, toffset, MSG_START_WINDOW(8), l->log_entry_raw_length, "Warning.", 8, &matches);
     if (mcnt == 0) {
-        mcnt = find_pattern(line, toffset, toffset+8, "Access", 6, &matches, MATCH_FIRST);
+        mcnt = find_in_window(line, toffset, MSG_START_WINDOW(6), l->log_entry_raw_length, "Access", 6, &matches);
     }
     else {
         l->log_entry_class = LOGMSG_WARNING;
@@ -1489,13 +1532,14 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
         }
     }
     else {
-        mcnt = find_pattern(line, toffset, toffset+6, "Rule", 4, &matches, MATCH_FIRST);
+        mcnt = find_in_window(line, toffset, MSG_START_WINDOW(4), l->log_entry_raw_length, "Rule", 4, &matches);
         if (mcnt == 1) {
             l->log_entry_class = LOGMSG_ERROR;
             parse_rule_error(line, &toffset, l, LOG_TYPE_APACHE);
         }
         else {
-            mcnt = find_pattern(line, toffset, toffset+14, "Request body", 12, &matches, MATCH_FIRST);
+            mcnt = find_in_window(line, toffset, MSG_START_WINDOW(12), l->log_entry_raw_length, "Request body", 12,
+                                  &matches);
             if (mcnt == 1) {
                 l->log_entry_class = LOGMSG_REQBODY;
                 size_t offs = toffset;
@@ -1507,7 +1551,8 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
                 }
             }
             else {
-                mcnt = find_pattern(line, toffset, toffset+14, "Audit log", 9, &matches, MATCH_FIRST);
+                mcnt = find_in_window(line, toffset, MSG_START_WINDOW(9), l->log_entry_raw_length, "Audit log", 9,
+                                      &matches);
                 if (mcnt == 1) {
                     l->log_entry_class = LOGMSG_AUDITLOG;
                     size_t offs = toffset;
@@ -1532,22 +1577,6 @@ static size_t modsec_offset(loglinetype t) {
     return (t == LOG_TYPE_APACHE) ? 90 : 30;
 }
 
-// the first occurrence of the pattern in the first len bytes of line, or NULL;
-// line doesn't have to be terminated (memmem() isn't standard C)
-static const char * mscl_find(const char *line, size_t len, const char *pattern, size_t plen) {
-    const char *p = line, *end = line + len;
-    while (plen > 0 && (size_t)(end - p) >= plen) {
-        p = memchr(p, pattern[0], (size_t)(end - p) - plen + 1);
-        if (p == NULL) {
-            return NULL;
-        }
-        if (memcmp(p, pattern, plen) == 0) {
-            return p;
-        }
-        p++;
-    }
-    return NULL;
-}
 
 // the position of the first ' ModSecurity:' after the shortest prefix of the
 // server (modsec_offset()) in the first len bytes of line, or len if there

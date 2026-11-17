@@ -28,6 +28,10 @@ v3.0.0 - 2026-11-16
     replaced the real [uri]); if the ModSecurity part contains more
     '[hostname "' or '[uri "' (libmodsecurity3 doesn't escape the '"'
     in them), the line is broken, and the two values aren't used
+  * Fix: the class of an Apache line ("Warning.", "Access", "Rule",
+    "Request body", "Audit log") is taken only from the start of the
+    message (it was found anywhere, eg. in the [uri]), and [client]
+    or [remote] only from the prefix, before " ModSecurity:"
   * Fix: log_modsec_msg_length of the Apache "Request body" and
     "Audit log" lines (it was 0)
   * Fix: an empty Nginx [hostname] is taken from the ', host: "' of
