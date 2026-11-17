@@ -677,7 +677,8 @@ static void find_tags(char *line, const size_t *offset, logdata *l) {
 // fulllen: the length of the whole line; the line is terminated at the end of
 // the ModSecurity part (l->log_entry_raw_length), the nginx context follows it
 // after that '\0' if fulllen is bigger, see modsec_part_end()
-static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart, size_t fulllen) {
+static void parse_tail_fields(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart,
+                              size_t fulllen) {
 
     // parse tail part of logline
     // Nginx:
@@ -823,6 +824,33 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     }
 
     return;
+}
+
+// the number of the occurrences of pattern in line
+static int count_pattern(const char *line, const char *pattern) {
+    int cnt = 0;
+    size_t plen = strlen(pattern);
+    const char *p = line;
+    while ((p = strstr(p, pattern)) != NULL) {
+        cnt++;
+        p += plen;
+    }
+    return cnt;
+}
+
+// libmodsecurity3 writes [hostname] (the Host header) and [uri] without
+// escaping the '"', so a fake '[hostname "' or '[uri "' can be in the message
+// or in the other one, eg. [uri "/a[hostname "evil"] [uri "/fake"]: if the
+// ModSecurity part has more than one of them, the line is broken, and the two
+// values aren't used ([unique_id] is still found, its value never contains a
+// '"')
+static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart, size_t fulllen) {
+    parse_tail_fields(linetype, line, startpos, l, tailstart, fulllen);
+    if (count_pattern(line, "[hostname \"") > 1 || count_pattern(line, "[uri \"") > 1) {
+        set_error(l, "Ambiguous [hostname] or [uri] field, the values aren't used!", 0, l->log_entry_raw_length);
+        l->log_hostname = mscl_emptystr;
+        l->log_uri = mscl_emptystr;
+    }
 }
 
 // Nginx appends its own context to the message of the ModSecurity connector,

@@ -201,6 +201,8 @@ typedef struct {
     const char *unique_id_exp;
     const char *server_exp;     // nginx only, NULL: log_server and log_client aren't checked
     int         ambiguous;      // more than one possible end: no field is used
+    int         tail_ambiguous; // more [hostname " or [uri ": these two aren't used
+    const char *uri;            // nginx: [uri], NULL: "/"
 } fake_fields_case;
 
 #define ERR_AMBIGUOUS_PART "Ambiguous end of the ModSecurity part, the fields aren't used!"
@@ -230,8 +232,14 @@ static const fake_fields_case fake_cases[] = {
       "1 [ref \"y\"], client: 192.0.2.66, server: evil.example.test", "www.example.test",
       REAL, "", "", "", 1 },
     // [uri] is searched after [hostname], not from the beginning of the line
+    // a fake [uri] or [hostname]: libmodsecurity3 doesn't escape the '"' in
+    // the message, [hostname] and [uri], so they aren't used
     { "nginx, fake [uri] in the matched value", LOG_TYPE_NGINX, "a [uri \"/evil\"]", "www.example.test",
-      REAL, "www.example.test", "168142074224.426959", "www.example.test" },
+      REAL, "", "168142074224.426959", "www.example.test", 0, 1 },
+    { "nginx, fake [hostname] and [uri] in the [uri]", LOG_TYPE_NGINX, "1", "www.example.test",
+      REAL, "", "168142074224.426959", "www.example.test", 0, 1, "/a[hostname \"evil\"] [uri \"/fake" },
+    { "nginx, fake [uri] in the [hostname]", LOG_TYPE_NGINX, "1", "h\"] [uri \"/fake",
+      REAL, "", "168142074224.426959", "www.example.test", 0, 1 },
     // nginx writes ' while ACTION' before the context in some phases
     { "nginx, while ACTION before the context", LOG_TYPE_NGINX, "1", "www.example.test",
       NGX_WHILE REAL ", host: \"www.example.test\"",
@@ -333,8 +341,8 @@ static void test_fake_fields_in_context(void) {
                 "\"Operator `Rx' with parameter `x' against variable `ARGS:q' (Value: `%s' ) "
                 "[file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"10\"] [id \"942100\"] "
                 "[msg \"SQL Injection\"] [severity \"2\"] [tag \"attack-sqli\"] "
-                "[hostname \"%s\"] [uri \"/\"] [unique_id \"168142074224.426959\"] [ref \"o0,5v10,5\"]%s",
-                c->value, c->hostname, c->suffix);
+                "[hostname \"%s\"] [uri \"%s\"] [unique_id \"168142074224.426959\"] [ref \"o0,5v10,5\"]%s",
+                c->value, c->hostname, c->uri != NULL ? c->uri : "/", c->suffix);
         }
         else {
             snprintf(line, sizeof(line), "%s%s", AP_LINE, c->suffix);
@@ -345,7 +353,7 @@ static void test_fake_fields_in_context(void) {
         parse(line, strlen(line), c->type, &l);
 
         // without a context the line is broken ("Can't find client field!")
-        int broken = c->ambiguous || (c->server_exp == NULL && c->type == LOG_TYPE_NGINX);
+        int broken = c->ambiguous || c->tail_ambiguous || (c->server_exp == NULL && c->type == LOG_TYPE_NGINX);
         CHECK(l.entry_is_modsecline == 1 && l.entry_is_broken == broken,
               "%s: modsecline %d broken %d", c->name, l.entry_is_modsecline, l.entry_is_broken);
         CHECK(has_error(&l, ERR_AMBIGUOUS_PART) == c->ambiguous, "%s: ambiguous error %d", c->name,
@@ -373,7 +381,9 @@ static void test_fake_fields_in_context(void) {
         CHECK(l.log_rule_tags_cnt == 1 && strcmp(l.log_rule_tags, "attack-sqli") == 0, "%s: tags %zu '%s'", c->name,
               l.log_rule_tags_cnt, l.log_rule_tags);
         CHECK(strcmp(l.log_hostname, c->hostname_exp) == 0, "%s: hostname '%s'", c->name, l.log_hostname);
-        CHECK(strcmp(l.log_uri, "/") == 0, "%s: uri '%s'", c->name, l.log_uri);
+        CHECK(strcmp(l.log_uri, c->tail_ambiguous ? "" : "/") == 0, "%s: uri '%s'", c->name, l.log_uri);
+        CHECK(has_error(&l, "Ambiguous [hostname] or [uri] field, the values aren't used!") == c->tail_ambiguous,
+              "%s: tail ambiguous error", c->name);
         CHECK(strcmp(l.log_unique_id, c->unique_id_exp) == 0, "%s: unique_id '%s'", c->name, l.log_unique_id);
         if (c->type == LOG_TYPE_NGINX && c->server_exp == NULL) {
             CHECK(l.log_client[0] == '\0' && l.log_server[0] == '\0', "%s: client '%s' server '%s' without a context",
