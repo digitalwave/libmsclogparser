@@ -947,11 +947,13 @@ static void set_modsec_msg(const char *line, size_t pos, size_t end, logdata *l)
     for(size_t k = msgstart; k < end && pi < MSCLOG_TBUFF_SIZE-1; k++) {
         tbuff[pi++] = line[k];
     }
-    tbuff[pi] = '\0';
     if (msgstart+pi < end) {
         set_error(l, "ModSecurity message is truncated!", pos+1, end);
-        pi = utf8_cut_len(tbuff, pi, line[msgstart+pi]);
     }
+    // a part of a UTF-8 character at the end (cut by the buffer, or by end)
+    // isn't stored
+    pi = utf8_cut_len(tbuff, pi, line[msgstart+pi]);
+    tbuff[pi] = '\0';
     l->log_modsec_msg = mscl_stradd(l, tbuff, pi);
     // the pool can truncate the message too
     l->log_modsec_msg_length = strlen(l->log_modsec_msg);
@@ -1504,7 +1506,6 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
             parse_rule_error(line, &toffset, l, LOG_TYPE_APACHE);
         }
         else {
-            char tbuff[MSCLOG_TBUFF_SIZE];
             mcnt = find_pattern(line, toffset, toffset+14, "Request body", 12, &matches, MATCH_FIRST);
             if (mcnt == 1) {
                 l->log_entry_class = LOGMSG_REQBODY;
@@ -1512,17 +1513,8 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
                 size_t hostpos = 0;
                 parse_tail(t, line, &offs, l, &hostpos, l->log_entry_raw_length);
                 if (hostpos > 0) {
-                    int k = toffset+1 + utf8_cut_start(line, toffset+1);
-                    int i = 0;
-                    while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
-                        tbuff[i++] = line[k++];
-                    }
-                    if (k < hostpos-1 && k < len && line[k] != '\0') {
-                        set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
-                    }
-                    i = utf8_cut_len(tbuff, i, line[k]);
-                    tbuff[i] = '\0';
-                    l->log_modsec_msg = mscl_stradd(l, tbuff, i);
+                    // the message is before [hostname]
+                    set_modsec_msg(line, toffset, hostpos-1, l);
                 }
             }
             else {
@@ -1533,17 +1525,8 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
                     size_t hostpos = 0;
                     parse_tail(t, line, &offs, l, &hostpos, l->log_entry_raw_length);
                     if (hostpos > 0) {
-                        int k = toffset+1 + utf8_cut_start(line, toffset+1);
-                        int i = 0;
-                        while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
-                            tbuff[i++] = line[k++];
-                        }
-                        if (k < hostpos-1 && k < len && line[k] != '\0') {
-                            set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
-                        }
-                        i = utf8_cut_len(tbuff, i, line[k]);
-                        tbuff[i] = '\0';
-                        l->log_modsec_msg = mscl_stradd(l, tbuff, i);
+                        // the message is before [hostname]
+                        set_modsec_msg(line, toffset, hostpos-1, l);
                     }
                 }
             }

@@ -367,6 +367,22 @@ static void test_fake_context_special(void) {
           && strcmp(l.log_unique_id, "168142074224.426959") == 0, "real cut line: id '%s' uid '%s'", l.log_rule_id,
           l.log_unique_id);
 
+    // Apache Request body and Audit log lines: the message is before [hostname],
+    // and its length is set
+    const char *apmsgs[] = {
+        "Request body (Content-Length) is larger than the configured limit (13107200).",
+        "Audit log: Failed to lock global mutex: Permission denied",
+    };
+    for (int m = 0; m < 2; m++) {
+        snprintf(line, sizeof(line), "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] "
+                 "[client 192.0.2.10:1234] ModSecurity: %s [hostname \"h\"] [uri \"/\"] [unique_id \"u\"]",
+                 apmsgs[m]);
+        memset(&l, '\0', sizeof(l));
+        parse(line, strlen(line), LOG_TYPE_APACHE, &l);
+        CHECK(strcmp(l.log_modsec_msg, apmsgs[m]) == 0 && l.log_modsec_msg_length == strlen(apmsgs[m]),
+              "apache message %d: '%s' length %zu", m, l.log_modsec_msg, l.log_modsec_msg_length);
+    }
+
     // a message without fields: log_client and log_server come from its context
     snprintf(line, sizeof(line), "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Request body processing "
              "error, client: 192.0.2.10, server: www.example.test, request: \"GET / HTTP/1.1\", host: \"h\"");
