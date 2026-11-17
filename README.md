@@ -644,9 +644,11 @@ Note, that the last argument (logdata) is necessary only in C. If you use any ki
 
 To see an example, you should check the examples directory. Here is a sample:
 ```C
-    char line[4096] = {0};
+    // bigger than MSCLOG_LINE_BUFF_SIZE: a too long line goes to parse() too,
+    // which reports it (see examples/example01.c for the rest of a longer one)
+    static char line[MSCLOG_LINE_BUFF_SIZE * 2];
     size_t len      = 0;
-    while (fgets (line, 4095, fp) != NULL) {
+    while (fgets (line, sizeof(line), fp) != NULL) {
         len = strlen(line);
         if (len > 0) {
             parse(line, len, t, &l);

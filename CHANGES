@@ -70,6 +70,7 @@ v3.0.0 - 2026-11-16
   * Python and Ruby test scripts pass the length in bytes
   * The installed header compiles as ISO C90 (no // comments), make
     check tests it
+  * README: the C sample reads lines up to 2 * MSCLOG_LINE_BUFF_SIZE
   * examples/example01.c doesn't clear logdata for every line, and
     reads lines up to 2 * MSCLOG_LINE_BUFF_SIZE (a longer line was cut
     into more records at 4096 bytes), and it's built with the header
