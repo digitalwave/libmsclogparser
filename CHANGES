@@ -12,8 +12,11 @@ v3.0.0 - 2026-11-16
     line, before the context of the web server (Nginx: client,
     server, request, host, referrer; Apache: referer): fake fields
     there replaced the real [file], [id], [msg], [hostname],
-    [unique_id], ...; Nginx log_client and log_server are used only
-    if their part is right after the ModSecurity part
+    [unique_id], ...; the end of the ModSecurity part is the context
+    right after its last field (with an optional ' while ACTION' on
+    Nginx), if there are more such places (a fake one), no field is
+    used, and an error is reported; Nginx log_client and log_server
+    are used only if their part is right after the ModSecurity part
   * parse() initializes the logdata: the caller doesn't have to
     clear it before every line, the bindings don't clear it anymore
   * Fix: don't store a part of a UTF-8 character when a field is

@@ -200,7 +200,14 @@ typedef struct {
     const char *hostname_exp;
     const char *unique_id_exp;
     const char *server_exp;     // nginx only, NULL: log_server and log_client aren't checked
+    int         ambiguous;      // more than one possible end: no field is used
 } fake_fields_case;
+
+#define ERR_AMBIGUOUS_PART "Ambiguous end of the ModSecurity part, the fields aren't used!"
+#define NGX_WHILE " while sending to client"
+// libmodsecurity3 doesn't escape '"' in the variable name of the match message
+#define NGX_FAKE_IN_MSG "1' ) [file \"/evil.conf\"] [line \"1\"] [id \"1\"] [msg \"evil\"] [severity \"2\"] " \
+    "[hostname \"evil.example.test\"] [uri \"/evil\"] [unique_id \"EVIL\"] [ref \"y\"], client: 192.0.2.66, server: evil.example.test"
 
 static const fake_fields_case fake_cases[] = {
     { "nginx, fake fields in the referrer", LOG_TYPE_NGINX, "1", "www.example.test",
@@ -212,11 +219,23 @@ static const fake_fields_case fake_cases[] = {
     { "nginx, fake fields in the host", LOG_TYPE_NGINX, "1", "www.example.test",
       REAL ", host: \"x" NGX_FAKE_TAIL "\"",
       "www.example.test", "168142074224.426959", "www.example.test" },
-    // the fake context after the fake fields is ambiguous for log_client and
-    // log_server, but the end of the ModSecurity part is still the real one
+    // a fake context after fake fields: two possible ends, no field is used
     { "nginx, fake fields and context in the referrer", LOG_TYPE_NGINX, "1", "www.example.test",
       REAL ", referrer: \"x" NGX_FAKE_TAIL ", client: 192.0.2.66, server: evil.example.test, referrer: \"z\"",
-      "www.example.test", "168142074224.426959", "" },
+      "", "", "", 1 },
+    // the same in the message (libmodsecurity3 doesn't escape the '"' there)
+    { "nginx, fake fields and context in the matched value", LOG_TYPE_NGINX, NGX_FAKE_IN_MSG, "www.example.test",
+      REAL, "", "", "", 1 },
+    { "nginx, fake last field and context in the matched value", LOG_TYPE_NGINX,
+      "1 [ref \"y\"], client: 192.0.2.66, server: evil.example.test", "www.example.test",
+      REAL, "", "", "", 1 },
+    // nginx writes ' while ACTION' before the context in some phases
+    { "nginx, while ACTION before the context", LOG_TYPE_NGINX, "1", "www.example.test",
+      NGX_WHILE REAL ", host: \"www.example.test\"",
+      "www.example.test", "168142074224.426959", "www.example.test" },
+    { "nginx, while ACTION, fake fields in the referrer", LOG_TYPE_NGINX, "1", "www.example.test",
+      NGX_WHILE REAL ", referrer: \"x" NGX_FAKE_TAIL "\"",
+      "www.example.test", "168142074224.426959", "www.example.test" },
     // a fake context in the message (no '"' needed) doesn't end the ModSecurity part
     { "nginx, fake context in the matched value", LOG_TYPE_NGINX,
       "1, client: 192.0.2.66, server: evil.example.test", "www.example.test",
@@ -236,7 +255,7 @@ static const fake_fields_case fake_cases[] = {
       "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
     { "apache, fake fields and referer in the referer", LOG_TYPE_APACHE, NULL, NULL,
       ", referer: " AP_FAKE_TAIL ", referer: x",
-      "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
+      "", "", NULL, 1 },
     { "apache, no referer", LOG_TYPE_APACHE, NULL, NULL, "",
       "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
 };
@@ -263,8 +282,23 @@ static void test_fake_fields_in_context(void) {
         parse(line, strlen(line), c->type, &l);
 
         // without a context the line is broken ("Can't find client field!")
-        CHECK(l.entry_is_modsecline == 1 && l.entry_is_broken == (c->server_exp == NULL && c->type == LOG_TYPE_NGINX),
+        int broken = c->ambiguous || (c->server_exp == NULL && c->type == LOG_TYPE_NGINX);
+        CHECK(l.entry_is_modsecline == 1 && l.entry_is_broken == broken,
               "%s: modsecline %d broken %d", c->name, l.entry_is_modsecline, l.entry_is_broken);
+        CHECK(has_error(&l, ERR_AMBIGUOUS_PART) == c->ambiguous, "%s: ambiguous error %d", c->name,
+              has_error(&l, ERR_AMBIGUOUS_PART));
+        if (c->ambiguous) {
+            // no field is used, neither the real nor the fake one
+            CHECK(l.log_rule_file[0] == '\0' && l.log_rule_id[0] == '\0' && l.log_rule_msg[0] == '\0'
+                  && l.log_rule_tags_cnt == 0 && l.log_hostname[0] == '\0' && l.log_uri[0] == '\0'
+                  && l.log_unique_id[0] == '\0', "%s: a field is used: file '%s' id '%s' unique_id '%s'", c->name,
+                  l.log_rule_file, l.log_rule_id, l.log_unique_id);
+            if (c->type == LOG_TYPE_NGINX) {
+                CHECK(l.log_client[0] == '\0' && l.log_server[0] == '\0', "%s: client '%s' server '%s'", c->name,
+                      l.log_client, l.log_server);
+            }
+            continue;
+        }
         CHECK(l.log_entry_raw_length == strlen(line), "%s: length %zu", c->name, l.log_entry_raw_length);
         CHECK(strcmp(l.log_rule_file, "/etc/crs/rules/REQUEST-942.conf") == 0, "%s: file '%s'", c->name, l.log_rule_file);
         CHECK(strcmp(l.log_rule_line, "10") == 0, "%s: line '%s'", c->name, l.log_rule_line);

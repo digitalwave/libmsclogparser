@@ -856,11 +856,11 @@ static void set_warning(logdata *l, const char *errmsg, size_t pos0, size_t pos1
     l->entry_is_broken = broken;
 }
 
-// partend: the end of the ModSecurity part, where the real context begins
-// (modsec_part_end()); the one ', client: ADDR, server: ' must be there, so a
-// fake one in the message isn't used if the real context is missing (eg. the
-// line was cut before it)
-static void parse_ngx_context(char *line, size_t partend, logdata *l) {
+// ctxpos: the position of the real context (modsec_part_end()), or the length
+// of the line if it isn't known; the one ', client: ADDR, server: ' must be
+// there, so a fake one in the message isn't used if the real context is
+// missing (eg. the line was cut before it)
+static void parse_ngx_context(char *line, size_t ctxpos, logdata *l) {
 
     size_t matches[2];
     size_t pos = 0;
@@ -896,7 +896,7 @@ static void parse_ngx_context(char *line, size_t partend, logdata *l) {
         set_warning(l, "client, server: ambiguous context, values not used", 0, l->log_entry_raw_length);
         return;
     }
-    if (cnt != 1 || addrpos != partend + 10) {
+    if (cnt != 1 || addrpos != ctxpos + 10) {
         return;
     }
 
@@ -1274,34 +1274,49 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
 // line is a copy of the caller's line, it can be modified
 // The server appends its own context to the ModSecurity message, and it
 // contains values of the request that aren't escaped: nginx writes
-// ', client: ADDR, server: NAME[, request: "LINE"]...[, host: "HOST"]
-// [, referrer: "REFERER"]' (see parse_ngx_context()), Apache 2.4 writes
-// ', referer: REFERER'. Most fields are searched from the end of the line
-// (MATCH_LAST), so a fake field in eg. the Referer header would replace the
-// real one: the fields are searched only in the ModSecurity part, before the
-// context. It returns the position where the context begins, or len.
+// '[ while ACTION], client: ADDR, server: NAME[, request: "LINE"]...
+// [, host: "HOST"][, referrer: "REFERER"]' (see parse_ngx_context()),
+// Apache 2.4 writes ', referer: REFERER'. Most fields are searched from the
+// end of the line (MATCH_LAST), so a fake field in eg. the Referer header
+// would replace the real one: the fields are searched only in the ModSecurity
+// part, before the context.
 // The real context follows the last field of the message: [unique_id "..."]
-// (ModSecurity v2) or [ref "..."] (libmodsecurity3), their values never
-// contain a '"'. A fake marker can be anywhere: in the message (a matched
-// value doesn't need a '"' for it, and the [uri] of libmodsecurity3 isn't
-// escaped), or in the context itself. The first marker right after one of
-// these fields is used, so a fake one in the context can't move the end, and
-// a fake one in the message only if it fakes the last field too - that needs
-// a '"' in the message, and ModSecurity has to escape it (libmodsecurity3
-// doesn't do it in [uri] yet). If there isn't such a marker, but the line
-// has fields ([file ", [id " or [unique_id "), the context is missing (eg.
-// nginx cut the line before it, or in the middle of the message), so there is
-// nothing to cut off: the whole line is used - a fake marker in a matched
-// value mustn't hide the fields. Otherwise (a message without fields) the
-// first marker is used. The search starts at from (after
-// ' ModSecurity:').
-// 1 if line[0..pos) ends with a [unique_id "..."] or a [ref "..."] field
-static int ends_with_last_field(const char *line, size_t from, size_t pos) {
-    if (pos < from + 2 || line[pos-2] != '"' || line[pos-1] != ']') {
+// (ModSecurity v2) or [ref "..."] (libmodsecurity3), whose values never
+// contain a '"', and on nginx an optional ' while ACTION' (a fixed text of
+// nginx, eg. 'sending to client'). Such a marker is a candidate. A fake one
+// can be both in the context and in the message: libmodsecurity3 doesn't
+// escape the '"' in the variable name and value of the match message, [msg],
+// [hostname] and [uri]. So neither the first nor the last candidate can be
+// trusted: if there is more than one, the end of the ModSecurity part is
+// ambiguous, and no field is used (an injection can hide the fields, but
+// can't replace them).
+typedef struct modsec_part {
+    size_t fieldend;    // the end of the last field, the fields are before it
+    size_t ctxpos;      // the position of the context marker, or len
+    int    candidates;  // the number of the candidates
+} modsec_part;
+
+// the position after the last field ([unique_id "..."] or [ref "..."]) if
+// the context marker at pos follows it (with a ' while ACTION' between them
+// on nginx), else 0
+static size_t last_field_end(const char *line, size_t from, size_t pos, loglinetype t) {
+    size_t e = pos;
+    if (t == LOG_TYPE_NGINX) {
+        // ' while ACTION': ACTION doesn't contain '"', '[', ']' or ','
+        size_t k = pos;
+        while (k > from && pos - k < 256 && line[k-1] != '"' && line[k-1] != '[' && line[k-1] != ']'
+               && line[k-1] != ',') {
+            k--;
+        }
+        if (pos - k > 7 && strncmp(line + k, " while ", 7) == 0) {
+            e = k;
+        }
+    }
+    if (e < from + 2 || line[e-2] != '"' || line[e-1] != ']') {
         return 0;
     }
     // the opening '"' of the value
-    size_t q = pos - 2;
+    size_t q = e - 2;
     while (q > from && line[q-1] != '"') {
         q--;
     }
@@ -1309,13 +1324,23 @@ static int ends_with_last_field(const char *line, size_t from, size_t pos) {
         return 0;
     }
     q--;
-    return (q >= from + 11 && strncmp(line + q - 11, "[unique_id ", 11) == 0)
-        || (q >= from + 5 && strncmp(line + q - 5, "[ref ", 5) == 0);
+    if ((q >= from + 11 && strncmp(line + q - 11, "[unique_id ", 11) == 0)
+        || (q >= from + 5 && strncmp(line + q - 5, "[ref ", 5) == 0)) {
+        return e;
+    }
+    return 0;
 }
 
-static size_t modsec_part_end(const char *line, size_t from, size_t len, loglinetype t) {
+// finds the end of the ModSecurity part after from (after ' ModSecurity:'):
+// with one candidate it's the end of the last field; without a candidate,
+// if the line has fields ([file ", [id " or [unique_id "), the context is
+// missing (eg. nginx cut the line), so there is nothing to cut off: it's len
+// (a fake marker in a value can't hide the fields); a message without fields
+// ends at the first marker
+static modsec_part modsec_part_end(const char *line, size_t from, size_t len, loglinetype t) {
     const char *marker = (t == LOG_TYPE_NGINX) ? ", client: " : ", referer: ";
     size_t mlen = strlen(marker);
+    modsec_part part = { len, len, 0 };
     size_t first = len;
     const char *p = line + from;
 
@@ -1331,8 +1356,13 @@ static size_t modsec_part_end(const char *line, size_t from, size_t len, logline
             valid = (k > pos + mlen && strncmp(line + k, ", server: ", 10) == 0);
         }
         if (valid) {
-            if (ends_with_last_field(line, from, pos)) {
-                return pos;
+            size_t e = last_field_end(line, from, pos, t);
+            if (e > 0) {
+                if (part.candidates == 0) {
+                    part.fieldend = e;
+                    part.ctxpos = pos;
+                }
+                part.candidates++;
             }
             if (first == len) {
                 first = pos;
@@ -1340,11 +1370,140 @@ static size_t modsec_part_end(const char *line, size_t from, size_t len, logline
         }
         p++;
     }
-    if (first < len && (strstr(line + from, " [file \"") != NULL || strstr(line + from, "[id \"") != NULL
-                        || strstr(line + from, "[unique_id \"") != NULL)) {
-        return len;
+    if (part.candidates == 0 && first < len
+        && strstr(line + from, " [file \"") == NULL && strstr(line + from, "[id \"") == NULL
+        && strstr(line + from, "[unique_id \"") == NULL) {
+        part.fieldend = first;
+        part.ctxpos = first;
     }
-    return first;
+    return part;
+}
+
+// the fields of an Apache line after ' ModSecurity:' (toffset); it returns 1
+// if the line can't be parsed
+static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l) {
+    loglinetype t = LOG_TYPE_APACHE;
+    size_t matches[2];
+    int mcnt;
+
+    // catch the [client ...] fields
+    // first possible occurrance position of first [client ...] is 65
+    // only in case of Apache
+
+    // catch the [client ...] fields
+    memset(matches, '\0', sizeof(size_t)*2);
+    // first possible occurrance position of first [client ...] is 65
+    // only in case of Apache
+    mcnt = find_pattern(line, 65, len, "[client ", 8, &matches, MATCH_FIRST);
+    if (mcnt != 1) {
+        mcnt = find_pattern(line, 65, len, "[remote ", 8, &matches, MATCH_FIRST);
+        if (mcnt != 1) {
+            set_error(l, "Can't find [client] or [remote] field!", 0, len);
+            return 1;
+        }
+    }
+    size_t pos = matches[0] + matches[1];
+    memset(matches, '\0', sizeof(size_t)*2);
+
+    int ci = 0;
+    int k = pos;
+    char client[50];
+    while(k < matches[0]-1 && k < len && line[k] != ']' && ci < sizeof(client)-1) {
+        client[ci++] = line[k++];
+    }
+    if (k < len && line[k] != ']') {
+        set_error(l, "[client] field is truncated!", pos, k);
+        ci = utf8_cut_len(client, ci, line[k]);
+    }
+    client[ci] = '\0';
+    l->log_client = mscl_stradd(l, client, ci);
+
+    //ap_log_msg_type log_msg_type;
+    memset(matches, '\0', sizeof(size_t)*2);
+    // order of most frequent patterns:
+    // "Warning" - Warning. Pattern match...
+    // "Access" - Access denied with code...
+    // "Request" - Request body (Content-Length) is larger
+    // "Rule" - Rule 7fxx ... - Execution error - PCRE limits exceeded (-8)
+    // based on next substring it determines what do we have to look for
+
+    // structure of Warning and Access lines are the same
+    mcnt = find_pattern(line, toffset, toffset+10, "Warning.", 8, &matches, MATCH_FIRST);
+    if (mcnt == 0) {
+        mcnt = find_pattern(line, toffset, toffset+8, "Access", 6, &matches, MATCH_FIRST);
+    }
+    else {
+        l->log_entry_class = LOGMSG_WARNING;
+    }
+    if (mcnt == 1 && toffset == matches[0]-1) {
+        int regular_ok = parse_regular(line, &toffset, l, LOG_TYPE_APACHE, len);
+        if (l->log_entry_class == LOGMSG_UNKNOWN) {
+            l->log_entry_class = LOGMSG_ACCDENIED;
+        }
+        // only safe to parse the warning message if parse_regular()
+        // actually found the '[file ...]' field and set
+        // l->log_modsec_msg / l->log_modsec_msg_length; otherwise
+        // log_modsec_msg_length stays 0 and the size_t arithmetic in
+        // parse_ap_warning_message() underflows, causing an
+        // out-of-bounds access (segfault).
+        if (regular_ok == 0 && l->log_entry_class == LOGMSG_WARNING) {
+            parse_ap_warning_message(l);
+        }
+    }
+    else {
+        mcnt = find_pattern(line, toffset, toffset+6, "Rule", 4, &matches, MATCH_FIRST);
+        if (mcnt == 1) {
+            l->log_entry_class = LOGMSG_ERROR;
+            parse_rule_error(line, &toffset, l, LOG_TYPE_APACHE);
+        }
+        else {
+            char tbuff[MSCLOG_TBUFF_SIZE];
+            mcnt = find_pattern(line, toffset, toffset+14, "Request body", 12, &matches, MATCH_FIRST);
+            if (mcnt == 1) {
+                l->log_entry_class = LOGMSG_REQBODY;
+                size_t offs = toffset;
+                size_t hostpos = 0;
+                parse_tail(t, line, &offs, l, &hostpos, l->log_entry_raw_length);
+                if (hostpos > 0) {
+                    int k = toffset+1 + utf8_cut_start(line, toffset+1);
+                    int i = 0;
+                    while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
+                        tbuff[i++] = line[k++];
+                    }
+                    if (k < hostpos-1 && k < len && line[k] != '\0') {
+                        set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
+                    }
+                    i = utf8_cut_len(tbuff, i, line[k]);
+                    tbuff[i] = '\0';
+                    l->log_modsec_msg = mscl_stradd(l, tbuff, i);
+                }
+            }
+            else {
+                mcnt = find_pattern(line, toffset, toffset+14, "Audit log", 9, &matches, MATCH_FIRST);
+                if (mcnt == 1) {
+                    l->log_entry_class = LOGMSG_AUDITLOG;
+                    size_t offs = toffset;
+                    size_t hostpos = 0;
+                    parse_tail(t, line, &offs, l, &hostpos, l->log_entry_raw_length);
+                    if (hostpos > 0) {
+                        int k = toffset+1 + utf8_cut_start(line, toffset+1);
+                        int i = 0;
+                        while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
+                            tbuff[i++] = line[k++];
+                        }
+                        if (k < hostpos-1 && k < len && line[k] != '\0') {
+                            set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
+                        }
+                        i = utf8_cut_len(tbuff, i, line[k]);
+                        tbuff[i] = '\0';
+                        l->log_modsec_msg = mscl_stradd(l, tbuff, i);
+                    }
+                }
+            }
+        }
+    }
+
+    return 0;
 }
 
 static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
@@ -1418,7 +1577,13 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // the fields are parsed only in the ModSecurity part: the line is
         // terminated before the server's context until then, see
         // modsec_part_end(); log_entry_raw_length is set back to len after it
-        size_t partend = modsec_part_end(line, matches[0] + matches[1], len, t);
+        modsec_part part = modsec_part_end(line, matches[0] + matches[1], len, t);
+        size_t partend = part.fieldend;
+        if (part.candidates > 1) {
+            // ambiguous end: no field is used
+            set_error(l, "Ambiguous end of the ModSecurity part, the fields aren't used!", part.ctxpos, len);
+            partend = matches[0] + matches[1];
+        }
         char partendchr = line[partend];
         line[partend] = '\0';
         l->log_entry_raw_length = partend;
@@ -1433,139 +1598,24 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // '... ModSecurity: '
         //              ~~~^
         size_t toffset = matches[0] + matches[1];
+        int rc = 0;
         if (t == LOG_TYPE_APACHE) {
-
-            // catch the [client ...] fields
-            // first possible occurrance position of first [client ...] is 65
-            // only in case of Apache
-
-            // catch the [client ...] fields
-            memset(matches, '\0', sizeof(size_t)*2);
-            // first possible occurrance position of first [client ...] is 65
-            // only in case of Apache
-            mcnt = find_pattern(line, 65, len, "[client ", 8, &matches, MATCH_FIRST);
-            if (mcnt != 1) {
-                mcnt = find_pattern(line, 65, len, "[remote ", 8, &matches, MATCH_FIRST);
-                if (mcnt != 1) {
-                    set_error(l, "Can't find [client] or [remote] field!", 0, len);
-                    line[partend] = partendchr;
-                    l->log_entry_raw_length = len;
-                    return 1;
-                }
-            }
-            size_t pos = matches[0] + matches[1];
-            memset(matches, '\0', sizeof(size_t)*2);
-
-            int ci = 0;
-            int k = pos;
-            char client[50];
-            while(k < matches[0]-1 && k < len && line[k] != ']' && ci < sizeof(client)-1) {
-                client[ci++] = line[k++];
-            }
-            if (k < len && line[k] != ']') {
-                set_error(l, "[client] field is truncated!", pos, k);
-                ci = utf8_cut_len(client, ci, line[k]);
-            }
-            client[ci] = '\0';
-            l->log_client = mscl_stradd(l, client, ci);
-
-            //ap_log_msg_type log_msg_type;
-            memset(matches, '\0', sizeof(size_t)*2);
-            // order of most frequent patterns:
-            // "Warning" - Warning. Pattern match...
-            // "Access" - Access denied with code...
-            // "Request" - Request body (Content-Length) is larger
-            // "Rule" - Rule 7fxx ... - Execution error - PCRE limits exceeded (-8)
-            // based on next substring it determines what do we have to look for
-
-            // structure of Warning and Access lines are the same
-            mcnt = find_pattern(line, toffset, toffset+10, "Warning.", 8, &matches, MATCH_FIRST);
-            if (mcnt == 0) {
-                mcnt = find_pattern(line, toffset, toffset+8, "Access", 6, &matches, MATCH_FIRST);
-            }
-            else {
-                l->log_entry_class = LOGMSG_WARNING;
-            }
-            if (mcnt == 1 && toffset == matches[0]-1) {
-                int regular_ok = parse_regular(line, &toffset, l, LOG_TYPE_APACHE, len);
-                if (l->log_entry_class == LOGMSG_UNKNOWN) {
-                    l->log_entry_class = LOGMSG_ACCDENIED;
-                }
-                // only safe to parse the warning message if parse_regular()
-                // actually found the '[file ...]' field and set
-                // l->log_modsec_msg / l->log_modsec_msg_length; otherwise
-                // log_modsec_msg_length stays 0 and the size_t arithmetic in
-                // parse_ap_warning_message() underflows, causing an
-                // out-of-bounds access (segfault).
-                if (regular_ok == 0 && l->log_entry_class == LOGMSG_WARNING) {
-                    parse_ap_warning_message(l);
-                }
-            }
-            else {
-                mcnt = find_pattern(line, toffset, toffset+6, "Rule", 4, &matches, MATCH_FIRST);
-                if (mcnt == 1) {
-                    l->log_entry_class = LOGMSG_ERROR;
-                    parse_rule_error(line, &toffset, l, LOG_TYPE_APACHE);
-                }
-                else {
-                    char tbuff[MSCLOG_TBUFF_SIZE];
-                    mcnt = find_pattern(line, toffset, toffset+14, "Request body", 12, &matches, MATCH_FIRST);
-                    if (mcnt == 1) {
-                        l->log_entry_class = LOGMSG_REQBODY;
-                        size_t offs = toffset;
-                        size_t hostpos = 0;
-                        parse_tail(t, line, &offs, l, &hostpos, l->log_entry_raw_length);
-                        if (hostpos > 0) {
-                            int k = toffset+1 + utf8_cut_start(line, toffset+1);
-                            int i = 0;
-                            while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
-                                tbuff[i++] = line[k++];
-                            }
-                            if (k < hostpos-1 && k < len && line[k] != '\0') {
-                                set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
-                            }
-                            i = utf8_cut_len(tbuff, i, line[k]);
-                            tbuff[i] = '\0';
-                            l->log_modsec_msg = mscl_stradd(l, tbuff, i);
-                        }
-                    }
-                    else {
-                        mcnt = find_pattern(line, toffset, toffset+14, "Audit log", 9, &matches, MATCH_FIRST);
-                        if (mcnt == 1) {
-                            l->log_entry_class = LOGMSG_AUDITLOG;
-                            size_t offs = toffset;
-                            size_t hostpos = 0;
-                            parse_tail(t, line, &offs, l, &hostpos, l->log_entry_raw_length);
-                            if (hostpos > 0) {
-                                int k = toffset+1 + utf8_cut_start(line, toffset+1);
-                                int i = 0;
-                                while(k < hostpos-1 && k < len && line[k] != '\0' && i < MSCLOG_TBUFF_SIZE-1) {
-                                    tbuff[i++] = line[k++];
-                                }
-                                if (k < hostpos-1 && k < len && line[k] != '\0') {
-                                    set_error(l, "ModSecurity message is truncated!", toffset+1, hostpos-1);
-                                }
-                                i = utf8_cut_len(tbuff, i, line[k]);
-                                tbuff[i] = '\0';
-                                l->log_modsec_msg = mscl_stradd(l, tbuff, i);
-                            }
-                        }
-                    }
-                }
-            }
+            rc = parse_apache_part(line, toffset, len, l);
         }
-
-        if (t == LOG_TYPE_NGINX) {
+        else {
             parse_regular(line, &toffset, l, LOG_TYPE_NGINX, len);
         }
 
         // the context is parsed on the whole line
         line[partend] = partendchr;
         l->log_entry_raw_length = len;
+        if (rc != 0) {
+            return rc;
+        }
 
         if (t == LOG_TYPE_NGINX) {
             // log_client and log_server
-            parse_ngx_context(line, partend, l);
+            parse_ngx_context(line, part.candidates == 1 ? part.ctxpos : len, l);
             // classify the message only if the nginx context is in the line
             memset(&matches, '\0', sizeof(size_t)*2);
             mcnt = find_pattern(line, toffset, len, ", client: ", 10, &matches, MATCH_FIRST);
