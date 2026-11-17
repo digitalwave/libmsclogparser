@@ -49,7 +49,9 @@ modsecurity@digitalwave.hu
 #include <stdio.h>
 #include <string.h>
 #include <Python.h>
-#include "../src/msclogparser.h"
+// the header of the source tree (-I../src in setup.py), or the installed one
+// when built from an sdist
+#include "msclogparser.h"
 
 
 // the version of the bindings is the version of the library

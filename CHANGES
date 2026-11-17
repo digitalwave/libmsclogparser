@@ -58,7 +58,8 @@ v3.0.0 - 2026-11-16
     messages are bytes too),
     build with setuptools instead of distutils, the positions and the
     lengths are passed as unsigned long long (unsigned long is 32 bits
-    on 64-bit Windows)
+    on 64-bit Windows), it builds from an sdist too (with the
+    installed header and library)
   * Ruby binding: parse() and the constants are in the
     MscRubyLogParser module (API change), new entry_is_modsecline,
     the values get the encoding of the line (binary if it isn't ASCII
