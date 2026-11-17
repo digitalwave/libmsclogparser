@@ -229,6 +229,9 @@ static const fake_fields_case fake_cases[] = {
     { "nginx, fake last field and context in the matched value", LOG_TYPE_NGINX,
       "1 [ref \"y\"], client: 192.0.2.66, server: evil.example.test", "www.example.test",
       REAL, "", "", "", 1 },
+    // [uri] is searched after [hostname], not from the beginning of the line
+    { "nginx, fake [uri] in the matched value", LOG_TYPE_NGINX, "a [uri \"/evil\"]", "www.example.test",
+      REAL, "www.example.test", "168142074224.426959", "www.example.test" },
     // nginx writes ' while ACTION' before the context in some phases
     { "nginx, while ACTION before the context", LOG_TYPE_NGINX, "1", "www.example.test",
       NGX_WHILE REAL ", host: \"www.example.test\"",

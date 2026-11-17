@@ -687,7 +687,9 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
 
     size_t matches[2];
     int k, t;
-    int hostlast = 0;
+    // [uri] and [unique_id] follow [hostname]: they are searched from there,
+    // so a '[uri "' in the message can't replace the real one
+    size_t hostlast = 0;
     size_t tlen = MSCLOG_TLEN_SIZE;
     int mcnt;
     char tbuff[tlen+1];
@@ -711,6 +713,7 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
         tbuff[t] = '\0';
         l->log_hostname = mscl_stradd(l, tbuff, t);
         *startpos = k;
+        hostlast = matches[0];
         if (tailstart != NULL) {
             *tailstart = matches[0];
         }

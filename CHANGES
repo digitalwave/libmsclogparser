@@ -17,6 +17,9 @@ v3.0.0 - 2026-11-16
     Nginx), if there are more such places (a fake one), no field is
     used, and an error is reported; Nginx log_client and log_server
     are used only if their part is right after the ModSecurity part
+  * Fix: [uri] and [unique_id] are searched after [hostname], not
+    from the beginning of the line (a '[uri "' in the message
+    replaced the real [uri])
   * parse() initializes the logdata: the caller doesn't have to
     clear it before every line, the bindings don't clear it anymore
   * Fix: don't store a part of a UTF-8 character when a field is
