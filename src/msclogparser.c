@@ -1141,19 +1141,9 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
     memset(matches, '\0', sizeof(size_t)*2);
     mcnt = find_pattern(line, *pos, fieldend, "[id \"", 5, &matches, MATCH_LAST);
     if (mcnt > 0) {
-        int pi = 0;
-        size_t msgstart = *pos+1 + utf8_cut_start(line, *pos+1);
-        // matches[0]-1 because of the leading space in front of
-        // '[id '
-        for(size_t p = msgstart; p < matches[0]-1 && pi < MSCLOG_TBUFF_SIZE-1; p++) {
-            tbuff[pi++] = line[p];
-        }
-        tbuff[pi] = '\0';
-        if (msgstart+pi < matches[0]-1) {
-            set_error(l, "ModSecurity message is truncated!", *pos+1, matches[0]-1);
-        }
-        pi = utf8_cut_len(tbuff, pi, line[msgstart+pi]);
-        l->log_modsec_msg = mscl_stradd(l, tbuff, pi);
+        // matches[0]-1 because of the leading space in front of '[id '; it
+        // sets log_modsec_msg_length too
+        set_modsec_msg(line, *pos, matches[0]-1, l);
     }
     else {
         // if no ' [id ' pattern, the line is broken

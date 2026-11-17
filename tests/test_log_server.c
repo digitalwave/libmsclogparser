@@ -440,6 +440,17 @@ static void test_fake_context_special(void) {
     CHECK(l.log_entry_class == LOGMSG_REQBODY && strcmp(l.log_uri, "/Rule") == 0, "apache, Rule in the uri: class %d uri '%s'",
           l.log_entry_class, l.log_uri);
 
+    // Apache Rule (execution error) line: the message is before '[id "', and
+    // its length is set
+    snprintf(line, sizeof(line), "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] "
+             "[client 192.0.2.10:1234] ModSecurity: Rule 7f12340000 [id \"942100\"][file \"/x.conf\"][line \"10\"] "
+             "- Execution error - PCRE limits exceeded (-8): (null). [hostname \"h\"] [uri \"/\"] [unique_id \"u\"]");
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_APACHE, &l);
+    CHECK(l.log_entry_class == LOGMSG_ERROR && strcmp(l.log_modsec_msg, "Rule 7f12340000") == 0
+          && l.log_modsec_msg_length == strlen("Rule 7f12340000"), "apache rule: class %d msg '%s' length %zu",
+          l.log_entry_class, l.log_modsec_msg, l.log_modsec_msg_length);
+
     // Apache: [client] is in the prefix, not in the message ([remote] in the
     // prefix, a '[client ' in the uri)
     snprintf(line, sizeof(line), "[Thu Feb 15 13:07:04.494742 2024] [security2:error] [pid 1:tid 2] "
