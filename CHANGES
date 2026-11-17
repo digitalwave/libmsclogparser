@@ -59,6 +59,9 @@ v3.0.0 - 2026-11-16
   * Python and Ruby test scripts pass the length in bytes
   * pkg-config file: the version and the paths come from configure
     (it said 0.3.0, and had a fixed libdir)
+  * Build: the version is only in src/msclogparser.h: configure
+    (package version, pkg-config, SONAME), the Python package and the
+    MODULE_VERSION of the bindings take it from there
   * Build: make uninstall removes the bindings (the Python module
     from the platlib directory of the interpreter), and make install
     of the Lua, Ruby and PHP bindings honors DESTDIR

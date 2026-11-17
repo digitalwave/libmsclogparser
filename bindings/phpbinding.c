@@ -53,7 +53,8 @@ modsecurity@digitalwave.hu
 
 #include "../src/msclogparser.h"
 
-#define MODULE_VERSION "3.0.0"
+// the version of the bindings is the version of the library
+#define MODULE_VERSION MSCLOGPARSER_VERSION
 
 // the len argument is bigger than the line: the line is parsed with its own
 // length, and this error is added

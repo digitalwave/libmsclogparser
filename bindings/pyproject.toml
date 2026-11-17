@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mscpylogparser"
-version = "3.0.0"
+# the version comes from src/msclogparser.h, see setup.py
+dynamic = ["version"]
 description = "Python bindings for libmsclogparser"
 authors = [{name = "Ervin Hegedüs", email = "airween@digitalwave.hu"}]
 dependencies = []

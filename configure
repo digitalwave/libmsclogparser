@@ -3050,10 +3050,6 @@ ac_config_headers="$ac_config_headers config.h"
 
 
 
-
-
-
-
 VER_NUMBER=3:0:0
 
 

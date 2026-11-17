@@ -1,14 +1,17 @@
 
-AC_INIT([msclogparser], [3.0.0], [modsecurity@digitalwave.hu])
+# the version is in src/msclogparser.h only (MSCLOGPARSER_MAJOR, _MINOR,
+# _PATCH): the package version and the SONAME come from there, and the
+# bindings use MSCLOGPARSER_VERSION
+m4_define([VER_MAJOR], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_MAJOR " | awk {'print $3'} | sed 's/\"//g'))
+m4_define([VER_MINOR], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_MINOR " | awk {'print $3'} | sed 's/\"//g'))
+m4_define([VER_PATCH], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_PATCH " | awk {'print $3'} | sed 's/\"//g'))
+
+AC_INIT([msclogparser], VER_MAJOR.VER_MINOR.VER_PATCH, [modsecurity@digitalwave.hu])
 #AM_INIT_AUTOMAKE([foreign subdir-objects])
 
 AC_CONFIG_SRCDIR([src/])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
-
-AC_DEFUN([VER_MAJOR], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_MAJOR " | awk {'print $3'} | sed 's/\"//g'))
-AC_DEFUN([VER_MINOR], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_MINOR " | awk {'print $3'} | sed 's/\"//g'))
-AC_DEFUN([VER_PATCH], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_PATCH " | awk {'print $3'} | sed 's/\"//g'))
 
 VER_NUMBER=VER_MAJOR:VER_MINOR:VER_PATCH
 AC_SUBST([VER_NUMBER])
