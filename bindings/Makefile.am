@@ -6,17 +6,21 @@ all-py: pybinding.c
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose)
 
-PYTHON_INSTALL_CMD = pip install --root=$(DESTDIR)/ \
+# the pip of $(PYTHON), so the module is installed for the same interpreter
+# that uninstall-py asks for its directories
+PYTHON_INSTALL_CMD = $(PYTHON) -m pip install --root=$(DESTDIR)/ \
                 --no-deps \
                 --ignore-installed \
                 --no-build-isolation .
 
-# pip installs the module and its dist-info into the platlib directory of the
+# pip installs the module and its dist-info into a site directory of the
 # interpreter (eg. /usr/local/lib/python3.X/dist-packages on Debian,
-# site-packages elsewhere), under DESTDIR
+# site-packages elsewhere; it depends on the scheme of pip), under DESTDIR:
+# they are removed from each of them
 uninstall-py:
-	site=`$(PYTHON) -c "import sysconfig; print(sysconfig.get_path('platlib'))"` && \
-	rm -rf "$(DESTDIR)$$site"/mscpylogparser*
+	for d in `$(PYTHON) -c "import site, sysconfig; print(' '.join(sorted(set([sysconfig.get_path('platlib'), sysconfig.get_path('purelib')] + site.getsitepackages()))))"`; do \
+	    rm -rf "$(DESTDIR)$$d"/mscpylogparser*; \
+	done
 
 
 clean-py:

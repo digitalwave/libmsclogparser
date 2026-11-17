@@ -293,7 +293,10 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 @ENABLE_PYTHON_FALSE@PYTHON_INSTALL_CMD = @echo "Python support disabled, skipping..."
-@ENABLE_PYTHON_TRUE@PYTHON_INSTALL_CMD = pip install --root=$(DESTDIR)/ \
+
+# the pip of $(PYTHON), so the module is installed for the same interpreter
+# that uninstall-py asks for its directories
+@ENABLE_PYTHON_TRUE@PYTHON_INSTALL_CMD = $(PYTHON) -m pip install --root=$(DESTDIR)/ \
 @ENABLE_PYTHON_TRUE@                --no-deps \
 @ENABLE_PYTHON_TRUE@                --ignore-installed \
 @ENABLE_PYTHON_TRUE@                --no-build-isolation .
@@ -504,12 +507,14 @@ uninstall-am: uninstall-local
 @ENABLE_PYTHON_TRUE@	--build-base $(shell readlink -f $(builddir))/build \
 @ENABLE_PYTHON_TRUE@	--verbose)
 
-# pip installs the module and its dist-info into the platlib directory of the
+# pip installs the module and its dist-info into a site directory of the
 # interpreter (eg. /usr/local/lib/python3.X/dist-packages on Debian,
-# site-packages elsewhere), under DESTDIR
+# site-packages elsewhere; it depends on the scheme of pip), under DESTDIR:
+# they are removed from each of them
 @ENABLE_PYTHON_TRUE@uninstall-py:
-@ENABLE_PYTHON_TRUE@	site=`$(PYTHON) -c "import sysconfig; print(sysconfig.get_path('platlib'))"` && \
-@ENABLE_PYTHON_TRUE@	rm -rf "$(DESTDIR)$$site"/mscpylogparser*
+@ENABLE_PYTHON_TRUE@	for d in `$(PYTHON) -c "import site, sysconfig; print(' '.join(sorted(set([sysconfig.get_path('platlib'), sysconfig.get_path('purelib')] + site.getsitepackages()))))"`; do \
+@ENABLE_PYTHON_TRUE@	    rm -rf "$(DESTDIR)$$d"/mscpylogparser*; \
+@ENABLE_PYTHON_TRUE@	done
 
 @ENABLE_PYTHON_TRUE@clean-py:
 @ENABLE_PYTHON_TRUE@	rm -rf *.o *.so *.la build
