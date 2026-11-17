@@ -74,8 +74,13 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
     // bindings (StringValueCStr() would raise an ArgumentError for it)
     const char  *line  = RSTRING_PTR(arg1);
     size_t       linelen = RSTRING_LEN(arg1);
-    // the values are parts of the line, they get its encoding
+    // the values are parts of the line, they get its encoding; an encoding
+    // that isn't ASCII compatible (eg. UTF-16) can't hold a C string, so they
+    // are binary (ASCII-8BIT) then
     rb_encoding *enc   = rb_enc_get(arg1);
+    if (!rb_enc_asciicompat(enc)) {
+        enc = rb_ascii8bit_encoding();
+    }
 
     // a len bigger than the line is reported by parse_checked()
     logdata l;
