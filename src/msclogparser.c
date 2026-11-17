@@ -1612,6 +1612,11 @@ static size_t modsec_offset(loglinetype t) {
     return (t == LOG_TYPE_APACHE) ? 90 : 30;
 }
 
+// a line of len bytes is too short to have ' ModSecurity:' after the prefix
+static int too_short_for_marker(size_t len, loglinetype t) {
+    return len <= modsec_offset(t) + 13;
+}
+
 
 // the position of the first ' ModSecurity:' after the shortest prefix of the
 // server (modsec_offset()) in the first len bytes of line, or len if there
@@ -1619,7 +1624,7 @@ static size_t modsec_offset(loglinetype t) {
 // (is_modsec_line()) use it, so they decide the same way
 static size_t modsec_marker(const char *line, size_t len, loglinetype t) {
     size_t offset = modsec_offset(t);
-    if (len <= offset + 13) {
+    if (too_short_for_marker(len, t)) {
         return len;
     }
     const char *p = mscl_find(line + offset, len - offset, " ModSecurity:", 13);
@@ -1664,20 +1669,12 @@ static void init_logdata(logdata *l) {
 
 static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
-    size_t offset = 0;
     init_logdata(l);
+    // parse() has removed the line ending, and terminated the copy
 
-    // remove EOL-s from the end of line
-    while(len > 0 && (line[len-1] == '\0' || line[len-1] == '\n' || line[len-1] == '\r')) {
-        len--;
-    }
-    line[len] = '\0';
-
-
-    // the shortest prefix of the server before ' ModSecurity:'
-    offset = modsec_offset(t);
-
-    if (len <= offset + 13) { // offset + length of ModSecurity
+    // too short for ' ModSecurity:' after the prefix of the server (the
+    // same check as in modsec_marker())
+    if (too_short_for_marker(len, t)) {
         return 1;
     }
 
