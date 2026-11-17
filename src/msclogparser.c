@@ -895,48 +895,33 @@ static void set_warning(logdata *l, const char *errmsg, size_t pos0, size_t pos1
 }
 
 // ctxpos: the position of the real context (modsec_part_end()), or the length
-// of the line if it isn't known; the one ', client: ADDR, server: ' must be
-// there, so a fake one in the message isn't used if the real context is
-// missing (eg. the line was cut before it)
-static void parse_ngx_context(char *line, size_t ctxpos, logdata *l) {
+// of the line if it isn't known; valid: the number of the ', client: ADDR,
+// server: ' parts (modsec_part_end() counts them); the one must be at ctxpos,
+// so a fake one in the message isn't used if the real context is missing (eg.
+// the line was cut before it)
+static void parse_ngx_context(char *line, size_t ctxpos, int valid, logdata *l) {
 
-    size_t matches[2];
-    size_t pos = 0;
-    size_t addrpos = 0, addrend = 0;
-    size_t valpos = 0;
-    size_t k, a;
-    int cnt = 0;
+    size_t addrpos, addrend, valpos, k;
 
     if (l->log_entry_raw_length >= NGX_MAX_ERROR_STR - 1) {
         set_warning(l, "client, server: line truncated, values not used", 0, l->log_entry_raw_length);
         return;
     }
-
-    while (pos < l->log_entry_raw_length) {
-        memset(matches, '\0', sizeof(size_t)*2);
-        if (find_pattern(line, pos, l->log_entry_raw_length, ", client: ", 10, &matches, MATCH_FIRST) == 0) {
-            break;
-        }
-        a = k = matches[0] + matches[1];
-        while(k < l->log_entry_raw_length && line[k] != ' ' && line[k] != ',') {
-            k++;
-        }
-        if (k > a && strncmp(line+k, ", server: ", 10) == 0) {
-            cnt++;
-            addrpos = a;
-            addrend = k;
-            valpos = k + 10;
-        }
-        pos = a;
-    }
-
-    if (cnt > 1) {
+    if (valid > 1) {
         set_warning(l, "client, server: ambiguous context, values not used", 0, l->log_entry_raw_length);
         return;
     }
-    if (cnt != 1 || addrpos != ctxpos + 10) {
+    // the one ', client: ADDR, server: ' must be the real context
+    if (valid != 1 || ctxpos >= l->log_entry_raw_length) {
         return;
     }
+
+    addrpos = k = ctxpos + 10;
+    while(k < l->log_entry_raw_length && line[k] != ' ' && line[k] != ',') {
+        k++;
+    }
+    addrend = k;
+    valpos = k + 10;
 
     if (addrend - addrpos < 256) {
         l->log_client = mscl_stradd(l, line+addrpos, addrend-addrpos);
@@ -1342,6 +1327,8 @@ typedef struct modsec_part {
     size_t ctxpos;      // the position of the context marker, or len
     int    candidates;  // the number of the candidates
     int    ambiguous;   // more candidates, or a doubtful one on a cut line
+    int    valid;       // nginx: the number of the ', client: ADDR, server: '
+    size_t lastmarker;  // the position of the last marker, or len
 } modsec_part;
 
 // the position after the last field ([unique_id "..."] or [ref "..."]) if
@@ -1388,13 +1375,14 @@ static size_t last_field_end(const char *line, size_t from, size_t pos, loglinet
 static modsec_part modsec_part_end(const char *line, size_t from, size_t len, loglinetype t) {
     const char *marker = (t == LOG_TYPE_NGINX) ? ", client: " : ", referer: ";
     size_t mlen = strlen(marker);
-    modsec_part part = { len, len, 0, 0 };
+    modsec_part part = { len, len, 0, 0, 0, len };
     size_t first = len;
     const char *p = line + from;
 
     while ((p = strstr(p, marker)) != NULL) {
         size_t pos = (size_t)(p - line);
         int valid = 1;
+        part.lastmarker = pos;
         if (t == LOG_TYPE_NGINX) {
             // ', client: ADDR, server: ', ADDR doesn't contain ' ' or ','
             size_t k = pos + mlen;
@@ -1404,6 +1392,7 @@ static modsec_part modsec_part_end(const char *line, size_t from, size_t len, lo
             valid = (k > pos + mlen && strncmp(line + k, ", server: ", 10) == 0);
         }
         if (valid) {
+            part.valid++;
             size_t e = last_field_end(line, from, pos, t);
             if (e > 0) {
                 if (part.candidates == 0) {
@@ -1683,11 +1672,10 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
         if (t == LOG_TYPE_NGINX) {
             // log_client and log_server
-            parse_ngx_context(line, part.ambiguous ? len : part.ctxpos, l);
-            // classify the message only if the nginx context is in the line
-            memset(&matches, '\0', sizeof(size_t)*2);
-            mcnt = find_pattern(line, toffset, len, ", client: ", 10, &matches, MATCH_FIRST);
-            if (mcnt == 1) {
+            parse_ngx_context(line, part.ambiguous ? len : part.ctxpos, part.valid, l);
+            // classify the message only if the nginx context is in the line,
+            // after the fields (toffset)
+            if (part.lastmarker < len && part.lastmarker >= toffset) {
                 // possible messages:
                 // 
                 // Matched "Operator `OP' with parameter `PARAM' against variable `VARIABLE' (Value: `VALUE' )
