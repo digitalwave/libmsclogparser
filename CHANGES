@@ -36,7 +36,8 @@ v3.0.0 - 2026-11-16
     "Audit log" lines (it was 0)
   * Fix: an empty Nginx [hostname] is taken from the ', host: "' of
     the context only if there is exactly one (a 'host: "' in the
-    request line won before), otherwise the line is broken
+    request line won before), otherwise the line is broken; without a
+    context (eg. a cut line) it's not searched at all
   * parse() initializes the logdata: the caller doesn't have to
     clear it before every line, the bindings don't clear it anymore
   * Fix: don't store a part of a UTF-8 character when a field is

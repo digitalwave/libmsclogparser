@@ -451,6 +451,25 @@ static void test_fake_context_special(void) {
     CHECK(l.entry_is_modsecline == 1 && strcmp(l.log_client, "192.0.2.100:51234") == 0,
           "apache, [client in the uri: modsecline %d client '%s'", l.entry_is_modsecline, l.log_client);
 
+    // nginx: an empty [hostname] on a line cut in the context (no context is
+    // found): the ', host: ' isn't searched in the ModSecurity part, where a
+    // fake one can be in the [uri]
+    char hpad[2048];
+    memset(hpad, 'B', 1600);
+    hpad[1600] = '\0';
+    snprintf(line, sizeof(line), "%sq' (Value: `%s' ) [file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"10\"] "
+             "[id \"942100\"] [msg \"SQL Injection\"] [hostname \"\"] [uri \"/x, host: \"evil\"] "
+             "[unique_id \"168142074224.426959\"] [ref \"v1,2\"], client: 192.0.2.10, server: www.example.test, "
+             "request: \"GET / HTTP/1.1\", host: \"real.example.test\"", head, hpad);
+    char *cut = strstr(line, "[ref \"v1,2\"], client:");
+    CHECK(cut != NULL, "empty hostname, cut line: no [ref]");
+    if (cut != NULL) {
+        cut[strlen("[ref \"v1,2\"], client:")] = '\0';
+    }
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_NGINX, &l);
+    CHECK(l.log_hostname[0] == '\0', "empty hostname, cut line: hostname '%s'", l.log_hostname);
+
     // a message without fields: log_client and log_server come from its context
     snprintf(line, sizeof(line), "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Request body processing "
              "error, client: 192.0.2.10, server: www.example.test, request: \"GET / HTTP/1.1\", host: \"h\"");

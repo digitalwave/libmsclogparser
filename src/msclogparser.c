@@ -674,18 +674,6 @@ static void find_tags(char *line, const size_t *offset, logdata *l) {
     }
 }
 
-// the number of the occurrences of pattern in line
-static int count_pattern(const char *line, const char *pattern) {
-    int cnt = 0;
-    size_t plen = strlen(pattern);
-    const char *p = line;
-    while ((p = strstr(p, pattern)) != NULL) {
-        cnt++;
-        p += plen;
-    }
-    return cnt;
-}
-
 // fulllen: the length of the whole line; the line is terminated at the end of
 // the ModSecurity part (l->log_entry_raw_length), the nginx context follows it
 // after that '\0' if fulllen is bigger, see modsec_part_end()
@@ -806,22 +794,28 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
     // parse_ngx_context().
     // If [hostname] is empty, eg. log is chunked, we have to process the
     // ', host: "..."' field; it's in the nginx context, after the ModSecurity
-    // part. The request line before it and the referrer after it aren't
-    // escaped, so a fake one can be on both sides: if there is more than one,
-    // none of them is used
+    // part (after the '\0' at its end, if the context was found: fulllen is
+    // bigger). Without a context (eg. the line was cut in it) it isn't
+    // searched: the ModSecurity part can contain a fake one (the [uri] of
+    // libmodsecurity3 isn't escaped). The request line before it and the
+    // referrer after it aren't escaped either, so a fake one can be on both
+    // sides: if there is more than one, none of them is used
     if (linetype == LOG_TYPE_NGINX && strlen(l->log_hostname) == 0) {
-        size_t from = hostlast, end = l->log_entry_raw_length;
-        if (fulllen > end) {
-            from = end + 1;
-            end = fulllen;
+        size_t end = l->log_entry_raw_length;
+        if (fulllen <= end) {
+            set_error(l, "Can't find 'host: \"\"' field!", hostlast, end);
+            return;
         }
-        if (count_pattern(line + from, ", host: \"") > 1) {
+        size_t from = end + 1;
+        end = fulllen;
+        // with MATCH_LAST find_pattern() returns the number of the matches
+        memset(&matches, '\0', sizeof(size_t)*2);
+        mcnt = find_pattern(line, from, end, ", host: \"", 9, &matches, MATCH_LAST);
+        if (mcnt > 1) {
             set_error(l, "Ambiguous 'host: \"\"' field, the value isn't used!", from, end);
             return;
         }
-        memset(&matches, '\0', sizeof(size_t)*2);
-        mcnt = find_pattern(line, from, end, ", host: \"", 9, &matches, MATCH_FIRST);
-        if (mcnt > 0) {
+        if (mcnt == 1) {
             k = matches[0] + matches[1];
             t = 0;
             while(k < end && line[k] != '"' && t < tlen) {
