@@ -819,6 +819,22 @@ static void test_line_too_long(void) {
     rc = parse(other, MSCLOG_LINE_BUFF_SIZE, LOG_TYPE_NGINX, &l);
     CHECK(rc == 1 && l.entry_is_modsecline == 0, "too long line, marker cut by len: rc=%d modsecline=%d",
           rc, l.entry_is_modsecline);
+    // ' ModSecurity:' only in the prefix of the server (before the offset that
+    // parse_copy() checks from): not a ModSecurity line, like a short one
+    memset(other, 'x', MSCLOG_LINE_BUFF_SIZE + 1);
+    memcpy(other + 5, " ModSecurity:", 13);
+    memset(&l, '\0', sizeof(logdata));
+    rc = parse(other, MSCLOG_LINE_BUFF_SIZE, LOG_TYPE_NGINX, &l);
+    CHECK(rc == 1 && l.entry_is_modsecline == 0, "too long line, marker in the prefix: rc=%d modsecline=%d",
+          rc, l.entry_is_modsecline);
+    other[100] = '\0';
+    memset(&l, '\0', sizeof(logdata));
+    rc = parse(other, 200, LOG_TYPE_NGINX, &l);
+    CHECK(rc == 1 && l.entry_is_modsecline == 0, "NUL, marker in the prefix: rc=%d modsecline=%d",
+          rc, l.entry_is_modsecline);
+    memset(&l, '\0', sizeof(logdata));
+    parse(other, 100, LOG_TYPE_NGINX, &l);
+    CHECK(l.entry_is_modsecline == 0, "short line, marker in the prefix: modsecline=%d", l.entry_is_modsecline);
     free(other);
 
     // the line ending doesn't count in the limit

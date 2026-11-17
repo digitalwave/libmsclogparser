@@ -651,7 +651,7 @@ To see an example, you should check the examples directory. Here is a sample:
         if (len > 0) {
             parse(line, len, t, &l);
 
-            if (l.is_modsecline == 1) {
+            if (l.entry_is_modsecline == 1) {
                 ...
 ```
 

@@ -1509,6 +1509,13 @@ static int parse_apache_part(char *line, size_t toffset, size_t len, logdata *l)
     return 0;
 }
 
+// the position of ' ModSecurity:' is checked from here, the prefix of the server
+static size_t modsec_offset(loglinetype t) {
+    // Apache: [Thu Sep 22 14:51:12.636955 2022] [security2:info] [pid 1:tid 1] [client 1.2.3.4:1]
+    // Nginx:  2022/12/20 17:04:13 [info] 1#1: *1
+    return (t == LOG_TYPE_APACHE) ? 90 : 30;
+}
+
 static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
     size_t offset = 0;
@@ -1550,18 +1557,8 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
     l->log_unique_id              = mscl_stradd(l, "", 0);
     l->log_server                 = mscl_stradd(l, "", 0);
 
-    if (t == LOG_TYPE_APACHE) {
-        // [Thu Sep 22 14:51:12.636955 2022] [security2:error] [pid 19765:tid 139903325140736] [client 165.232.134.42:52179]
-        // [Thu Sep 22 14:51:12.636955 2022] [security2:info] [pid 1:tid 1] [client 1.2.3.4:1]
-        //          |         |         |         |         |         |         |         |         |         |         |         |         |
-        offset = 90;
-    }
-    else if (t == LOG_TYPE_NGINX) {
-        // 2022/12/20 17:04:13 [info] 59513#59513: *1
-        // 2022/12/20 17:04:13 [info] 1#1: *1
-        //          |         |         |         |
-        offset = 30;
-    }
+    // the shortest prefix of the server before ' ModSecurity:'
+    offset = modsec_offset(t);
 
     if (len <= offset + 13) { // offset + length of ModSecurity
         return 1;
@@ -1674,6 +1671,31 @@ static int mscl_contains(const char *line, size_t len, const char *pattern, size
     return 0;
 }
 
+// the same check as in parse_copy(): ' ModSecurity:' after modsec_offset()
+static int is_modsec_line(const char *line, size_t len, loglinetype t) {
+    size_t offset = modsec_offset(t);
+    if (len <= offset + 13) {
+        return 0;
+    }
+    return mscl_contains(line + offset, len - offset, " ModSecurity:", 13);
+}
+
+// a line that isn't parsed: an empty line is parsed to initialize the fields,
+// the length is set, and the error is reported (it makes the line broken); if
+// check_modsec, a ModSecurity line is still marked as one, so the caller
+// doesn't drop it as an unrelated line
+static int reject_line(const char *line, size_t len, loglinetype t, logdata *l, const char *errmsg, size_t errpos,
+                       int check_modsec) {
+    l->linebuf[0] = '\0';
+    parse_copy(l->linebuf, 0, t, l);
+    l->log_entry_raw_length = len;
+    if (check_modsec) {
+        l->entry_is_modsecline = is_modsec_line(line, len, t);
+    }
+    set_error(l, errmsg, errpos, len);
+    return 1;
+}
+
 // The parser needs a line terminated with '\0', and it writes the '\0' to
 // line[len]. It works on a copy in l->linebuf, so the caller's line isn't
 // modified, and it doesn't have to be terminated. The values are stored in the
@@ -1688,34 +1710,17 @@ int parse (const char * line, size_t len, loglinetype t, logdata * l) {
         len--;
     }
     if (t != LOG_TYPE_APACHE && t != LOG_TYPE_NGINX) {
-        // unknown type: parse an empty line to initialize the fields, and report it
-        l->linebuf[0] = '\0';
-        parse_copy(l->linebuf, 0, LOG_TYPE_APACHE, l);
-        l->log_entry_raw_length = len;
-        set_error(l, "Unknown log type!", 0, len);
-        return 1;
+        return reject_line(line, len, LOG_TYPE_APACHE, l, "Unknown log type!", 0, 0);
     }
     if (len >= sizeof(l->linebuf)) {
-        // too long: parse an empty line to initialize the fields, and report it;
-        // a ModSecurity line is still marked as one (with the same check as in
-        // parse_copy()), so the caller doesn't drop it as an unrelated line
-        l->linebuf[0] = '\0';
-        parse_copy(l->linebuf, 0, t, l);
-        l->log_entry_raw_length = len;
-        l->entry_is_modsecline = mscl_contains(line, len, " ModSecurity:", 13);
-        set_error(l, "The line is too long, it can't be parsed!", 0, len);
-        return 1;
+        return reject_line(line, len, t, l, "The line is too long, it can't be parsed!", 0, 1);
     }
     // the parser works on a '\0' terminated string, it would stop at a '\0' in
     // the line: such a line isn't parsed either, the same way as a too long one
     const char *nul = memchr(line, '\0', len);
     if (nul != NULL) {
-        l->linebuf[0] = '\0';
-        parse_copy(l->linebuf, 0, t, l);
-        l->log_entry_raw_length = len;
-        l->entry_is_modsecline = mscl_contains(line, len, " ModSecurity:", 13);
-        set_error(l, "The line contains a NUL character, it can't be parsed!", (size_t)(nul - line), len);
-        return 1;
+        return reject_line(line, len, t, l, "The line contains a NUL character, it can't be parsed!",
+                           (size_t)(nul - line), 1);
     }
 
     memcpy(l->linebuf, line, len);
