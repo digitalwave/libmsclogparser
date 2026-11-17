@@ -49,7 +49,6 @@ modsecurity@digitalwave.hu
 #include "lua.h"
 #include "lauxlib.h"
 
-#include <stdio.h>
 #include <string.h>
 
 #include "../src/msclogparser.h"
