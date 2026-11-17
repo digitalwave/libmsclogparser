@@ -689,8 +689,7 @@ static int count_pattern(const char *line, const char *pattern) {
 // fulllen: the length of the whole line; the line is terminated at the end of
 // the ModSecurity part (l->log_entry_raw_length), the nginx context follows it
 // after that '\0' if fulllen is bigger, see modsec_part_end()
-static void parse_tail_fields(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart,
-                              size_t fulllen) {
+static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart, size_t fulllen) {
 
     // parse tail part of logline
     // Nginx:
@@ -845,20 +844,6 @@ static void parse_tail_fields(loglinetype linetype, char *line, size_t *startpos
     return;
 }
 
-// libmodsecurity3 writes [hostname] (the Host header) and [uri] without
-// escaping the '"', so a fake '[hostname "' or '[uri "' can be in the message
-// or in the other one, eg. [uri "/a[hostname "evil"] [uri "/fake"]: if the
-// ModSecurity part has more than one of them, the line is broken, and the two
-// values aren't used ([unique_id] is still found, its value never contains a
-// '"')
-static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logdata *l, size_t *tailstart, size_t fulllen) {
-    parse_tail_fields(linetype, line, startpos, l, tailstart, fulllen);
-    if (count_pattern(line, "[hostname \"") > 1 || count_pattern(line, "[uri \"") > 1) {
-        set_error(l, "Ambiguous [hostname] or [uri] field, the values aren't used!", 0, l->log_entry_raw_length);
-        l->log_hostname = mscl_emptystr;
-        l->log_uri = mscl_emptystr;
-    }
-}
 
 // Nginx appends its own context to the message of the ModSecurity connector,
 // see ngx_http_log_error() and ngx_http_log_error_handler() in
@@ -1573,6 +1558,36 @@ static size_t modsec_marker(const char *line, size_t len, loglinetype t) {
     return (p == NULL) ? len : (size_t)(p - line);
 }
 
+// the number of some fields of the ModSecurity part, counted in one pass that
+// stops only at the '['s (s is the terminated part)
+typedef struct field_counts {
+    int file;       // ' [file "'
+    int id;         // '[id "'
+    int hostname;   // '[hostname "'
+    int uri;        // '[uri "'
+} field_counts;
+
+static field_counts count_fields(const char *s) {
+    field_counts c = { 0, 0, 0, 0 };
+    const char *start = s;
+    while ((s = strchr(s, '[')) != NULL) {
+        if (s[1] == 'f' && strncmp(s, "[file \"", 7) == 0 && s > start && s[-1] == ' ') {
+            c.file++;
+        }
+        else if (s[1] == 'i' && strncmp(s, "[id \"", 5) == 0) {
+            c.id++;
+        }
+        else if (s[1] == 'h' && strncmp(s, "[hostname \"", 11) == 0) {
+            c.hostname++;
+        }
+        else if (s[1] == 'u' && strncmp(s, "[uri \"", 6) == 0) {
+            c.uri++;
+        }
+        s++;
+    }
+    return c;
+}
+
 static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
     size_t offset = 0;
@@ -1645,8 +1660,8 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // the message, or in the [uri] of libmodsecurity3), eg. on a line that
         // nginx cut right after a fake context, so that one is its only
         // candidate, and no field follows it
-        if (!part.ambiguous && (count_pattern(line + mpos + 13, " [file \"") > 1
-                                || count_pattern(line + mpos + 13, "[id \"") > 1)) {
+        field_counts fc = count_fields(line + mpos + 13);
+        if (!part.ambiguous && (fc.file > 1 || fc.id > 1)) {
             part.ambiguous = 1;
             set_error(l, "More [file] or [id] fields in the ModSecurity part, the fields aren't used!", mpos + 13,
                       partend);
@@ -1674,6 +1689,17 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // the context is parsed on the whole line
         line[partend] = partendchr;
         l->log_entry_raw_length = len;
+        // libmodsecurity3 writes [hostname] (the Host header) and [uri] without
+        // escaping the '"', so a fake '[hostname "' or '[uri "' can be in the
+        // message or in the other one, eg. [uri "/a[hostname "evil"] [uri
+        // "/fake"]: if the ModSecurity part has more than one of them, the
+        // line is broken, and the two values aren't used ([unique_id] is
+        // still found, its value never contains a '"')
+        if (fc.hostname > 1 || fc.uri > 1) {
+            set_error(l, "Ambiguous [hostname] or [uri] field, the values aren't used!", 0, partend);
+            l->log_hostname = mscl_emptystr;
+            l->log_uri = mscl_emptystr;
+        }
         if (part.ambiguous) {
             // the fields of the rule and the tail may be fakes
             for (int f = LOGFIELD_LOG_RULE_FILE; f <= LOGFIELD_LOG_UNIQUE_ID; f++) {
