@@ -1560,6 +1560,36 @@ static size_t modsec_offset(loglinetype t) {
     return (t == LOG_TYPE_APACHE) ? 90 : 30;
 }
 
+// the first occurrence of the pattern in the first len bytes of line, or NULL;
+// line doesn't have to be terminated (memmem() isn't standard C)
+static const char * mscl_find(const char *line, size_t len, const char *pattern, size_t plen) {
+    const char *p = line, *end = line + len;
+    while (plen > 0 && (size_t)(end - p) >= plen) {
+        p = memchr(p, pattern[0], (size_t)(end - p) - plen + 1);
+        if (p == NULL) {
+            return NULL;
+        }
+        if (memcmp(p, pattern, plen) == 0) {
+            return p;
+        }
+        p++;
+    }
+    return NULL;
+}
+
+// the position of the first ' ModSecurity:' after the shortest prefix of the
+// server (modsec_offset()) in the first len bytes of line, or len if there
+// isn't any, or the line is too short; parse_copy() and the rejected lines
+// (is_modsec_line()) use it, so they decide the same way
+static size_t modsec_marker(const char *line, size_t len, loglinetype t) {
+    size_t offset = modsec_offset(t);
+    if (len <= offset + 13) {
+        return len;
+    }
+    const char *p = mscl_find(line + offset, len - offset, " ModSecurity:", 13);
+    return (p == NULL) ? len : (size_t)(p - line);
+}
+
 static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
     size_t offset = 0;
@@ -1610,18 +1640,15 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
 
     l->log_entry_raw_length = len;
 
-    // store position and length
-    size_t matches[2];
-    memset(matches, '\0', sizeof(size_t)*2);
     // first find the " ModSecurity:" string, if exists in the line
-    int mcnt = find_pattern(line, offset, len, " ModSecurity:", 13, &matches, MATCH_FIRST);
+    size_t mpos = modsec_marker(line, len, t);
     // continue only if it is there
-    if (mcnt == 1) {
+    if (mpos < len) {
         l->entry_is_modsecline = 1;
         // the fields are parsed only in the ModSecurity part: the line is
         // terminated before the server's context until then, see
         // modsec_part_end(); log_entry_raw_length is set back to len after it
-        modsec_part part = modsec_part_end(line, matches[0] + matches[1], len, t);
+        modsec_part part = modsec_part_end(line, mpos + 13, len, t);
         size_t partend = part.fieldend;
         if (part.ambiguous) {
             // the line is parsed until the first candidate, but only the class
@@ -1641,7 +1668,7 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // toffset points here:
         // '... ModSecurity: '
         //              ~~~^
-        size_t toffset = matches[0] + matches[1];
+        size_t toffset = mpos + 13;
         size_t msgpos = toffset;
         int rc = 0;
         if (t == LOG_TYPE_APACHE) {
@@ -1675,6 +1702,8 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
             parse_ngx_context(line, part.ambiguous ? len : part.ctxpos, part.valid, l);
             // classify the message only if the nginx context is in the line,
             // after the fields (toffset)
+            size_t matches[2];
+            int mcnt;
             if (part.lastmarker < len && part.lastmarker >= toffset) {
                 // possible messages:
                 // 
@@ -1710,30 +1739,10 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
     return 0;
 }
 
-// 1 if the first len bytes of line contain the pattern; line doesn't have to be
-// terminated (memmem() isn't standard C)
-static int mscl_contains(const char *line, size_t len, const char *pattern, size_t plen) {
-    const char *p = line, *end = line + len;
-    while (plen > 0 && (size_t)(end - p) >= plen) {
-        p = memchr(p, pattern[0], (size_t)(end - p) - plen + 1);
-        if (p == NULL) {
-            return 0;
-        }
-        if (memcmp(p, pattern, plen) == 0) {
-            return 1;
-        }
-        p++;
-    }
-    return 0;
-}
 
-// the same check as in parse_copy(): ' ModSecurity:' after modsec_offset()
+// the same check as in parse_copy()
 static int is_modsec_line(const char *line, size_t len, loglinetype t) {
-    size_t offset = modsec_offset(t);
-    if (len <= offset + 13) {
-        return 0;
-    }
-    return mscl_contains(line + offset, len - offset, " ModSecurity:", 13);
+    return modsec_marker(line, len, t) < len;
 }
 
 // a line that isn't parsed: an empty line is parsed to initialize the fields,
