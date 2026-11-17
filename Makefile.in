@@ -92,7 +92,8 @@ build_triplet = @build@
 host_triplet = @host@
 check_PROGRAMS = tests/test_bounds$(EXEEXT) \
 	tests/test_bounds_tiny$(EXEEXT) \
-	tests/test_warning_msg$(EXEEXT) tests/test_log_server$(EXEEXT)
+	tests/test_warning_msg$(EXEEXT) tests/test_log_server$(EXEEXT) \
+	tests/test_header_c89$(EXEEXT)
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_lua.m4 \
@@ -120,6 +121,14 @@ am__v_lt_1 =
 am_tests_test_bounds_tiny_OBJECTS = tests/test_bounds_tiny.$(OBJEXT)
 tests_test_bounds_tiny_OBJECTS = $(am_tests_test_bounds_tiny_OBJECTS)
 tests_test_bounds_tiny_LDADD = $(LDADD)
+am_tests_test_header_c89_OBJECTS =  \
+	tests/test_header_c89-test_header_c89.$(OBJEXT)
+tests_test_header_c89_OBJECTS = $(am_tests_test_header_c89_OBJECTS)
+tests_test_header_c89_LDADD = $(LDADD)
+tests_test_header_c89_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(tests_test_header_c89_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 am_tests_test_log_server_OBJECTS = tests/test_log_server.$(OBJEXT)
 tests_test_log_server_OBJECTS = $(am_tests_test_log_server_OBJECTS)
 tests_test_log_server_LDADD = $(LDADD)
@@ -143,6 +152,7 @@ depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = tests/$(DEPDIR)/test_bounds.Po \
 	tests/$(DEPDIR)/test_bounds_tiny.Po \
+	tests/$(DEPDIR)/test_header_c89-test_header_c89.Po \
 	tests/$(DEPDIR)/test_log_server.Po \
 	tests/$(DEPDIR)/test_warning_msg.Po
 am__mv = mv -f
@@ -166,10 +176,12 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(tests_test_bounds_SOURCES) \
 	$(tests_test_bounds_tiny_SOURCES) \
+	$(tests_test_header_c89_SOURCES) \
 	$(tests_test_log_server_SOURCES) \
 	$(tests_test_warning_msg_SOURCES)
 DIST_SOURCES = $(tests_test_bounds_SOURCES) \
 	$(tests_test_bounds_tiny_SOURCES) \
+	$(tests_test_header_c89_SOURCES) \
 	$(tests_test_log_server_SOURCES) \
 	$(tests_test_warning_msg_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
@@ -659,6 +671,10 @@ tests_test_bounds_SOURCES = tests/test_bounds.c tests/test_util.h
 tests_test_bounds_tiny_SOURCES = tests/test_bounds_tiny.c tests/test_util.h
 tests_test_warning_msg_SOURCES = tests/test_warning_msg.c tests/test_util.h
 tests_test_log_server_SOURCES = tests/test_log_server.c tests/test_util.h
+# only the installed header, as ISO C90
+tests_test_header_c89_SOURCES = tests/test_header_c89.c
+tests_test_header_c89_CPPFLAGS = -I$(top_srcdir)/src
+tests_test_header_c89_CFLAGS = -std=c89 -pedantic-errors
 TESTS = $(check_PROGRAMS)
 EXTRA_DIST = tests/run-tests.sh
 all: config.h
@@ -738,6 +754,12 @@ tests/test_bounds_tiny.$(OBJEXT): tests/$(am__dirstamp) \
 tests/test_bounds_tiny$(EXEEXT): $(tests_test_bounds_tiny_OBJECTS) $(tests_test_bounds_tiny_DEPENDENCIES) $(EXTRA_tests_test_bounds_tiny_DEPENDENCIES) tests/$(am__dirstamp)
 	@rm -f tests/test_bounds_tiny$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tests_test_bounds_tiny_OBJECTS) $(tests_test_bounds_tiny_LDADD) $(LIBS)
+tests/test_header_c89-test_header_c89.$(OBJEXT):  \
+	tests/$(am__dirstamp) tests/$(DEPDIR)/$(am__dirstamp)
+
+tests/test_header_c89$(EXEEXT): $(tests_test_header_c89_OBJECTS) $(tests_test_header_c89_DEPENDENCIES) $(EXTRA_tests_test_header_c89_DEPENDENCIES) tests/$(am__dirstamp)
+	@rm -f tests/test_header_c89$(EXEEXT)
+	$(AM_V_CCLD)$(tests_test_header_c89_LINK) $(tests_test_header_c89_OBJECTS) $(tests_test_header_c89_LDADD) $(LIBS)
 tests/test_log_server.$(OBJEXT): tests/$(am__dirstamp) \
 	tests/$(DEPDIR)/$(am__dirstamp)
 
@@ -760,6 +782,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/test_bounds.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/test_bounds_tiny.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/test_header_c89-test_header_c89.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/test_log_server.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tests/$(DEPDIR)/test_warning_msg.Po@am__quote@ # am--include-marker
 
@@ -792,6 +815,20 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+tests/test_header_c89-test_header_c89.o: tests/test_header_c89.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_test_header_c89_CPPFLAGS) $(CPPFLAGS) $(tests_test_header_c89_CFLAGS) $(CFLAGS) -MT tests/test_header_c89-test_header_c89.o -MD -MP -MF tests/$(DEPDIR)/test_header_c89-test_header_c89.Tpo -c -o tests/test_header_c89-test_header_c89.o `test -f 'tests/test_header_c89.c' || echo '$(srcdir)/'`tests/test_header_c89.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/$(DEPDIR)/test_header_c89-test_header_c89.Tpo tests/$(DEPDIR)/test_header_c89-test_header_c89.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/test_header_c89.c' object='tests/test_header_c89-test_header_c89.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_test_header_c89_CPPFLAGS) $(CPPFLAGS) $(tests_test_header_c89_CFLAGS) $(CFLAGS) -c -o tests/test_header_c89-test_header_c89.o `test -f 'tests/test_header_c89.c' || echo '$(srcdir)/'`tests/test_header_c89.c
+
+tests/test_header_c89-test_header_c89.obj: tests/test_header_c89.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_test_header_c89_CPPFLAGS) $(CPPFLAGS) $(tests_test_header_c89_CFLAGS) $(CFLAGS) -MT tests/test_header_c89-test_header_c89.obj -MD -MP -MF tests/$(DEPDIR)/test_header_c89-test_header_c89.Tpo -c -o tests/test_header_c89-test_header_c89.obj `if test -f 'tests/test_header_c89.c'; then $(CYGPATH_W) 'tests/test_header_c89.c'; else $(CYGPATH_W) '$(srcdir)/tests/test_header_c89.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tests/$(DEPDIR)/test_header_c89-test_header_c89.Tpo tests/$(DEPDIR)/test_header_c89-test_header_c89.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tests/test_header_c89.c' object='tests/test_header_c89-test_header_c89.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(tests_test_header_c89_CPPFLAGS) $(CPPFLAGS) $(tests_test_header_c89_CFLAGS) $(CFLAGS) -c -o tests/test_header_c89-test_header_c89.obj `if test -f 'tests/test_header_c89.c'; then $(CYGPATH_W) 'tests/test_header_c89.c'; else $(CYGPATH_W) '$(srcdir)/tests/test_header_c89.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -1124,6 +1161,13 @@ tests/test_log_server.log: tests/test_log_server$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+tests/test_header_c89.log: tests/test_header_c89$(EXEEXT)
+	@p='tests/test_header_c89$(EXEEXT)'; \
+	b='tests/test_header_c89'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 .test.log:
 	@p='$<'; \
 	$(am__set_b); \
@@ -1441,6 +1485,7 @@ distclean: distclean-recursive
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -f tests/$(DEPDIR)/test_bounds.Po
 	-rm -f tests/$(DEPDIR)/test_bounds_tiny.Po
+	-rm -f tests/$(DEPDIR)/test_header_c89-test_header_c89.Po
 	-rm -f tests/$(DEPDIR)/test_log_server.Po
 	-rm -f tests/$(DEPDIR)/test_warning_msg.Po
 	-rm -f Makefile
@@ -1492,6 +1537,7 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -rf $(top_srcdir)/autom4te.cache
 	-rm -f tests/$(DEPDIR)/test_bounds.Po
 	-rm -f tests/$(DEPDIR)/test_bounds_tiny.Po
+	-rm -f tests/$(DEPDIR)/test_header_c89-test_header_c89.Po
 	-rm -f tests/$(DEPDIR)/test_log_server.Po
 	-rm -f tests/$(DEPDIR)/test_warning_msg.Po
 	-rm -f Makefile

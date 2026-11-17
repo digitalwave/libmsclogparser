@@ -186,19 +186,21 @@ typedef struct logdata {
 typedef char * logvalptr;
 
 void read_msclog_err(msclogpool *pool, msclogerr *err);
-// parses the first len bytes of line; line doesn't have to be NUL terminated,
-// and it isn't modified; a line of MSCLOG_LINE_BUFF_SIZE bytes or longer (without
-// the line ending) isn't parsed, it's an error (the fields are empty, but
-// entry_is_modsecline is set for a ModSecurity line), and so is a line with a
-// NUL character (except at the end, like the line ending); an unknown t is an error
-// too, the fields are empty; l doesn't have to be cleared before the call, it can be
-// reused for every line
+/* parses the first len bytes of line; line doesn't have to be NUL terminated,
+ * and it isn't modified; a line of MSCLOG_LINE_BUFF_SIZE bytes or longer
+ * (without the line ending) isn't parsed, it's an error (the fields are empty,
+ * but entry_is_modsecline is set for a ModSecurity line), and so is a line with
+ * a NUL character (except at the end, like the line ending); an unknown t is an
+ * error too, the fields are empty; l doesn't have to be cleared before the
+ * call, it can be reused for every line
+ */
 int parse (const char * line, size_t len, loglinetype t, logdata * l);
-// like parse(), for a line of linelen bytes and a len that comes from the
-// caller (eg. a script): if len is bigger than linelen, the whole line is
-// parsed, the line is broken, and the error "The given length (LEN) is bigger
-// than the line (LINELEN bytes)!" is added, with the positions linelen and len;
-// it returns 1 then
+/* like parse(), for a line of linelen bytes and a len that comes from the
+ * caller (eg. a script): if len is bigger than linelen, the whole line is
+ * parsed, the line is broken, and the error "The given length (LEN) is bigger
+ * than the line (LINELEN bytes)!" is added, with the positions linelen and
+ * len; it returns 1 then
+ */
 int parse_checked (const char * line, size_t linelen, size_t len, loglinetype t, logdata * l);
 
 #endif
