@@ -1615,20 +1615,14 @@ static field_counts count_fields(const char *s) {
     return c;
 }
 
-static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
-
-    size_t offset = 0;
+// empties the pools, and sets every field to an empty string (parse() has
+// cleared the counters and the flags)
+static void init_logdata(logdata *l) {
     l->lineerrpool.currptr = l->lineerrpool.pool;
     l->lineerrpool.offset = 0;
 
     l->datapool.currptr = l->datapool.pool;
     l->datapool.offset = 0;
-
-    // remove EOL-s from the end of line
-    while(len > 0 && (line[len-1] == '\0' || line[len-1] == '\n' || line[len-1] == '\r')) {
-        len--;
-    }
-    line[len] = '\0';
 
     // initialize string pointers with an empty string
     l->log_date_iso               = mscl_stradd(l, "", 0);
@@ -1655,6 +1649,19 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
     l->log_uri                    = mscl_stradd(l, "", 0);
     l->log_unique_id              = mscl_stradd(l, "", 0);
     l->log_server                 = mscl_stradd(l, "", 0);
+}
+
+static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
+
+    size_t offset = 0;
+    init_logdata(l);
+
+    // remove EOL-s from the end of line
+    while(len > 0 && (line[len-1] == '\0' || line[len-1] == '\n' || line[len-1] == '\r')) {
+        len--;
+    }
+    line[len] = '\0';
+
 
     // the shortest prefix of the server before ' ModSecurity:'
     offset = modsec_offset(t);
@@ -1801,14 +1808,13 @@ static int is_modsec_line(const char *line, size_t len, loglinetype t) {
     return modsec_marker(line, len, t) < len;
 }
 
-// a line that isn't parsed: an empty line is parsed to initialize the fields,
-// the length is set, and the error is reported (it makes the line broken); if
+// a line that isn't parsed: the fields are initialized (empty), the length is
+// set, and the error is reported (it makes the line broken); if
 // check_modsec, a ModSecurity line is still marked as one, so the caller
 // doesn't drop it as an unrelated line
 static int reject_line(const char *line, size_t len, loglinetype t, logdata *l, const char *errmsg, size_t errpos,
                        int check_modsec) {
-    l->linebuf[0] = '\0';
-    parse_copy(l->linebuf, 0, t, l);
+    init_logdata(l);
     l->log_entry_raw_length = len;
     if (check_modsec) {
         l->entry_is_modsecline = is_modsec_line(line, len, t);
