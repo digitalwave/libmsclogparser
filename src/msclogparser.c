@@ -1796,3 +1796,17 @@ int parse (const char * line, size_t len, loglinetype t, logdata * l) {
 
     return parse_copy(l->linebuf, len, t, l);
 }
+
+// parse() for a line of linelen bytes, where len comes from the caller (eg. a
+// script): if it's bigger than the line, the whole line is parsed (parse()
+// never reads after its end), and an error is added
+int parse_checked (const char * line, size_t linelen, size_t len, loglinetype t, logdata * l) {
+    if (len <= linelen) {
+        return parse(line, len, t, l);
+    }
+    parse(line, linelen, t, l);
+    char msg[128];
+    snprintf(msg, sizeof(msg), "The given length (%zu) is bigger than the line (%zu bytes)!", len, linelen);
+    set_error(l, msg, linelen, len);
+    return 1;
+}

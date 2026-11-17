@@ -54,10 +54,6 @@ modsecurity@digitalwave.hu
 // the version of the bindings is the version of the library
 #define MODULE_VERSION MSCLOGPARSER_VERSION
 
-// the len argument is bigger than the line: the line is parsed with its own
-// length, and this error is added
-#define MSCLEN_ERROR_FMT "The given length (%zu) is bigger than the line (%zu bytes)!"
-
 static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE arg3) {
 
     // the conversions can run Ruby code (to_str, to_int), which can change or
@@ -81,21 +77,11 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
     // the values are parts of the line, they get its encoding
     rb_encoding *enc   = rb_enc_get(arg1);
 
-    // a len bigger than the line would make parse() read after its end: the
-    // line is parsed with its own length, and the error is reported
-    size_t givenlen = len;
-    int lenerr = len > linelen;
-    if (lenerr) {
-        len = linelen;
-    }
-
+    // a len bigger than the line is reported by parse_checked()
     logdata l;
-    parse(line, len, ltype, &l);
+    parse_checked(line, linelen, len, ltype, &l);
     // the line is used until here
     RB_GC_GUARD(arg1);
-    if (lenerr) {
-        l.entry_is_broken = 1;
-    }
 
     VALUE result = rb_hash_new();
 
@@ -139,7 +125,7 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
     rb_hash_aset(result, ID2SYM(rb_intern("log_uri")), rb_enc_str_new_cstr(l.log_uri, enc));
     rb_hash_aset(result, ID2SYM(rb_intern("log_unique_id")), rb_enc_str_new_cstr(l.log_unique_id, enc));
     rb_hash_aset(result, ID2SYM(rb_intern("log_server")), rb_enc_str_new_cstr(l.log_server, enc));
-    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_cnt")), INT2NUM(l.log_entry_errors_cnt + lenerr));
+    rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_cnt")), INT2NUM(l.log_entry_errors_cnt));
 
     VALUE errors = rb_ary_new();
     VALUE errorspos = rb_ary_new();
@@ -152,12 +138,6 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
             rb_ary_push(errors, rb_enc_str_new_cstr(logerr.errmsg, enc));
             rb_ary_push(errorspos, rb_ary_new3(2, SIZET2NUM(*logerr.startpos), SIZET2NUM(*logerr.endpos)));
         }
-    }
-    if (lenerr) {
-        char msg[128];
-        snprintf(msg, sizeof(msg), MSCLEN_ERROR_FMT, givenlen, linelen);
-        rb_ary_push(errors, rb_enc_str_new_cstr(msg, enc));
-        rb_ary_push(errorspos, rb_ary_new3(2, SIZET2NUM(linelen), SIZET2NUM(givenlen)));
     }
     rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors")), errors);
     rb_hash_aset(result, ID2SYM(rb_intern("log_entry_errors_pos")), errorspos);

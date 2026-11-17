@@ -194,5 +194,11 @@ void read_msclog_err(msclogpool *pool, msclogerr *err);
 // too, the fields are empty; l doesn't have to be cleared before the call, it can be
 // reused for every line
 int parse (const char * line, size_t len, loglinetype t, logdata * l);
+// like parse(), for a line of linelen bytes and a len that comes from the
+// caller (eg. a script): if len is bigger than linelen, the whole line is
+// parsed, the line is broken, and the error "The given length (LEN) is bigger
+// than the line (LINELEN bytes)!" is added, with the positions linelen and len;
+// it returns 1 then
+int parse_checked (const char * line, size_t linelen, size_t len, loglinetype t, logdata * l);
 
 #endif

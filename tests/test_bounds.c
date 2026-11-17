@@ -919,12 +919,54 @@ static void test_nul_in_line(void) {
     free(s);
 }
 
+// parse_checked(): a len bigger than the line parses the whole line, and adds
+// an error with the positions linelen and len; otherwise it's parse()
+static void test_parse_checked(void) {
+    logdata l, ref;
+    char *s = cat(AP_HEAD, "Warning. x.", FIELDS, AP_TAIL, NULL);
+    size_t len = strlen(s);
+
+    memset(&ref, '\0', sizeof(logdata));
+    parse(s, len, LOG_TYPE_APACHE, &ref);
+    memset(&l, 0xa5, sizeof(logdata));
+    int rc = parse_checked(s, len, len, LOG_TYPE_APACHE, &l);
+    CHECK(l.log_entry_errors_cnt == ref.log_entry_errors_cnt && strcmp(l.log_unique_id, ref.log_unique_id) == 0,
+          "parse_checked, len = linelen: rc=%d errors=%d", rc, l.log_entry_errors_cnt);
+    memset(&l, 0xa5, sizeof(logdata));
+    rc = parse_checked(s, len, len - 10, LOG_TYPE_APACHE, &l);
+    CHECK(l.log_entry_raw_length == len - 10 && !has_error(&l, "The given length (0) is bigger than the line (0 bytes)!"),
+          "parse_checked, len < linelen: length %zu", l.log_entry_raw_length);
+
+    memset(&l, 0xa5, sizeof(logdata));
+    rc = parse_checked(s, len, len + 100, LOG_TYPE_APACHE, &l);
+    char msg[128];
+    snprintf(msg, sizeof(msg), "The given length (%zu) is bigger than the line (%zu bytes)!", len + 100, len);
+    CHECK(rc == 1 && l.entry_is_broken == 1, "parse_checked, len > linelen: rc=%d broken=%d", rc, l.entry_is_broken);
+    // with tiny buffers the error pool can be full (like for any other error)
+    CHECKV(l.log_entry_errors_cnt == ref.log_entry_errors_cnt + 1 && has_error(&l, msg),
+           "parse_checked, len > linelen: errors=%d", l.log_entry_errors_cnt);
+    CHECK(l.log_entry_raw_length == len && strcmp(l.log_unique_id, ref.log_unique_id) == 0
+          && strcmp(l.log_rule_id, ref.log_rule_id) == 0, "parse_checked, len > linelen: length %zu id '%s'",
+          l.log_entry_raw_length, l.log_rule_id);
+    // the error of the length is the last one
+    l.lineerrpool.currptr = l.lineerrpool.pool;
+    msclogerr err;
+    for (int c = 0; c < l.log_entry_errors_cnt; c++) {
+        read_msclog_err(&l.lineerrpool, &err);
+    }
+    CHECKV(strcmp(err.errmsg, msg) == 0 && *err.startpos == len && *err.endpos == len + 100,
+          "parse_checked: last error '%s' positions %zu, %zu", err.errmsg, *err.startpos, *err.endpos);
+    check_invariants("parse_checked", &l);
+    free(s);
+}
+
 int main(void) {
     test_line_not_modified();
     test_line_too_long();
     test_reuse_logdata();
     test_unknown_type();
     test_nul_in_line();
+    test_parse_checked();
     test_regular_lines();
     test_long_message();
     test_many_tags();

@@ -656,6 +656,12 @@ To see an example, you should check the examples directory. Here is a sample:
 ```
 
 ```C
+int parse_checked (const char * line, size_t linelen, size_t len, loglinetype t, logdata * l);
+```
+
+Like `parse()`, for a line of `linelen` bytes and a `len` that comes from the caller (eg. from a script): if `len` is bigger than `linelen`, the whole line is parsed (`parse()` never reads after its end), the line is broken, the error `The given length (LEN) is bigger than the line (LINELEN bytes)!` is added with the positions `linelen` and `len`, and it returns 1. The bindings use it.
+
+```C
 void read_msclog_err(msclogpool *pool, msclogerr *err);
 ```
 where the arguments:

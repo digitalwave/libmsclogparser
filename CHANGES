@@ -35,8 +35,8 @@ v3.0.0 - 2026-11-16
   * Fix: quadratic re-search in find_pattern() on lines with many
     partial field names
   * Bindings: if len is bigger than the line, the whole line is
-    parsed, and an error is added to log_entry_errors; a negative
-    len raises an error
+    parsed, and an error is added to log_entry_errors (by the new
+    parse_checked() of the library); a negative len raises an error
   * A line with a NUL character (except at its end) isn't parsed,
     it's reported as an error, like a too long line; the Python and
     Ruby bindings don't raise an error for it anymore, so all four

@@ -56,10 +56,6 @@ modsecurity@digitalwave.hu
 // the version of the bindings is the version of the library
 #define MODULE_VERSION MSCLOGPARSER_VERSION
 
-// the len argument is bigger than the line: the line is parsed with its own
-// length, and this error is added
-#define MSCLEN_ERROR_FMT "The given length (%zu) is bigger than the line (%zu bytes)!"
-
 // an invalid argument value: PHP 8 throws a ValueError, PHP 7 has no
 // zend_argument_value_error() and RETURN_THROWS(), there a warning is raised
 // and parse() returns false, like for the other argument errors
@@ -117,19 +113,9 @@ PHP_FUNCTION(parse)
         MSCL_ARG_VALUE_ERROR(3, "must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
     }
 
-    // a len bigger than the line would make parse() read after its end: the
-    // line is parsed with its own length, and the error is reported
-    size_t givenlen = (size_t)len;
-    int lenerr = givenlen > linelen;
-    if (lenerr) {
-        len = (zend_long)linelen;
-    }
-
+    // a len bigger than the line is reported by parse_checked()
     logdata l;
-    parse(line, (size_t)len, (loglinetype)ltype, &l);
-    if (lenerr) {
-        l.entry_is_broken = 1;
-    }
+    parse_checked(line, linelen, (size_t)len, (loglinetype)ltype, &l);
 
     zval tags, errors, errorspos;
 
@@ -175,7 +161,7 @@ PHP_FUNCTION(parse)
     add_assoc_string(return_value, "log_unique_id",     l.log_unique_id);
     add_assoc_string(return_value, "log_server",        l.log_server);
 
-    add_assoc_long(return_value,   "log_entry_errors_cnt",    l.log_entry_errors_cnt + lenerr);
+    add_assoc_long(return_value,   "log_entry_errors_cnt",    l.log_entry_errors_cnt);
     array_init(&errors);
     array_init(&errorspos);
 
@@ -192,16 +178,6 @@ PHP_FUNCTION(parse)
             add_next_index_long(&pairs, *logerr.endpos);
             add_next_index_zval(&errorspos, &pairs);
         }
-    }
-    if (lenerr) {
-        char msg[128];
-        snprintf(msg, sizeof(msg), MSCLEN_ERROR_FMT, givenlen, linelen);
-        add_next_index_string(&errors, msg);
-        zval pairs;
-        array_init(&pairs);
-        add_next_index_long(&pairs, (zend_long)linelen);
-        add_next_index_long(&pairs, (zend_long)givenlen);
-        add_next_index_zval(&errorspos, &pairs);
     }
 
     add_assoc_zval(return_value, "log_entry_errors", &errors);

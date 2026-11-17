@@ -55,10 +55,6 @@ modsecurity@digitalwave.hu
 // the version of the bindings is the version of the library
 #define MODULE_VERSION MSCLOGPARSER_VERSION
 
-// the len argument is bigger than the line: the line is parsed with its own
-// length, and this error is added
-#define MSCLEN_ERROR_FMT "The given length (%zu) is bigger than the line (%zu bytes)!"
-
 static char mscpylogparser_parse_doc[] = "parse(line, len, type) - Parse a ModSecurity generated error.log line.\n\n"
     "line is str or bytes, len is its length in bytes. The values of the fields\n"
     "and the error messages are str if line is str, and bytes if line is bytes.";
@@ -121,15 +117,8 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    // a len bigger than the line would make parse() read after its end: the
-    // line is parsed with its own length, and the error is reported
-    size_t givenlen = (size_t)len;
-    int lenerr = givenlen > (size_t)linelen;
-    if (lenerr) {
-        len = linelen;
-    }
-
-    parse(line, (size_t)len, (loglinetype)ltype, &l);
+    // a len bigger than the line is reported by parse_checked()
+    parse_checked(line, (size_t)linelen, (size_t)len, (loglinetype)ltype, &l);
 
     PyObject *tags = PyList_New(0);
     PyObject *errors = PyList_New(0);
@@ -158,17 +147,6 @@ static PyObject* mscpylogparser_parse(PyObject *self, PyObject *args) {
                 goto cleanup;
             }
         }
-    }
-
-    if (lenerr) {
-        char msg[128];
-        snprintf(msg, sizeof(msg), MSCLEN_ERROR_FMT, givenlen, (size_t)linelen);
-        if (list_append_new(errors, Py_BuildValue(as_bytes ? "y" : "s", msg)) < 0 ||
-            list_append_new(errorspos, Py_BuildValue("[k,k]", (unsigned long)linelen, (unsigned long)givenlen)) < 0) {
-            goto cleanup;
-        }
-        l.entry_is_broken = 1;
-        l.log_entry_errors_cnt++;
     }
 
     rv = Py_BuildValue(as_bytes ? MSCPY_RESULT_FORMAT("y") : MSCPY_RESULT_FORMAT("s"),
