@@ -868,6 +868,11 @@ static void parse_tail(loglinetype linetype, char *line, size_t *startpos, logda
 // either (also one error).
 #define NGX_MAX_ERROR_STR 2048
 
+// a line of len bytes (without the LF) was cut by nginx
+static int ngx_line_cut(size_t len) {
+    return len >= NGX_MAX_ERROR_STR - 1;
+}
+
 // records an error that doesn't make the line broken
 static void set_warning(logdata *l, const char *errmsg, size_t pos0, size_t pos1) {
     int broken = l->entry_is_broken;
@@ -885,7 +890,7 @@ static void parse_ngx_context(char *line, size_t ctxpos, int valid, int trusted,
 
     size_t addrpos, addrend, valpos, k;
 
-    if (l->log_entry_raw_length >= NGX_MAX_ERROR_STR - 1) {
+    if (ngx_line_cut(l->log_entry_raw_length)) {
         set_warning(l, "client, server: line truncated, values not used", 0, l->log_entry_raw_length);
         return;
     }
@@ -1448,7 +1453,7 @@ static modsec_part modsec_part_end(const char *line, size_t from, size_t len, lo
     if (part.candidates > 1) {
         part.ambiguous = 1;
     }
-    else if (part.candidates == 1 && (t == LOG_TYPE_APACHE || len >= NGX_MAX_ERROR_STR - 1)) {
+    else if (part.candidates == 1 && (t == LOG_TYPE_APACHE || ngx_line_cut(len))) {
         field_counts c = count_fields(line + part.ctxpos);
         if (c.file > 0 || c.id > 0 || c.unique_id > 0 || c.ref > 0) {
             part.ambiguous = 1;
@@ -1767,7 +1772,7 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
                               part.candidates == 1 && !part.ambiguous, l);
             // one ', client: ADDR, server: ', but not right after the fields
             // (eg. an unknown text between them): it isn't used, say why
-            if (!part.ambiguous && part.valid == 1 && part.ctxpos >= len && len < NGX_MAX_ERROR_STR - 1) {
+            if (!part.ambiguous && part.valid == 1 && part.ctxpos >= len && !ngx_line_cut(len)) {
                 set_warning(l, "client, server: not right after the fields, values not used", 0, len);
             }
             // classify the message only if the nginx context is in the line,
