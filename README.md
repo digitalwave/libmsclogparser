@@ -557,7 +557,7 @@ will give
 modsecurity.digitalwave.hu
 ```
 
-This field can't be chunked.
+This field can't be chunked. If `[hostname]` is empty on an Nginx line, the value comes from the `, host: "..."` part of the Nginx context; if the context contains more than one (a fake one in the request line or in the referrer), none of them is used, the line is broken, and the error is `Ambiguous 'host: ""' field, the value isn't used!`.
 
 ##### `log_uri`
 Contains the URI of the request. This property is independent from the rule, and always presents.

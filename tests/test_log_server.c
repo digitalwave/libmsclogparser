@@ -203,6 +203,7 @@ typedef struct {
     int         ambiguous;      // more than one possible end: no field is used
     int         tail_ambiguous; // more [hostname " or [uri ": these two aren't used
     const char *uri;            // nginx: [uri], NULL: "/"
+    int         host_ambiguous; // more ', host: "' in the context: no host
 } fake_fields_case;
 
 #define ERR_AMBIGUOUS_PART "Ambiguous end of the ModSecurity part, the fields aren't used!"
@@ -257,10 +258,20 @@ static const fake_fields_case fake_cases[] = {
     { "nginx, no context, fake context in the matched value", LOG_TYPE_NGINX,
       "1, client: 192.0.2.66, server: evil.example.test", "www.example.test", "",
       "www.example.test", "168142074224.426959", NULL },
-    // an empty [hostname] is taken from the host: of the context, not from a fake one
+    // an empty [hostname] is taken from the ', host: ' of the context; a fake
+    // one in the request line or the referrer makes it ambiguous
+    { "nginx, empty hostname, host in the context", LOG_TYPE_NGINX, "1", "",
+      REAL ", host: \"real.example.test\", referrer: \"x host: \"evil\"\"",
+      "real.example.test", "168142074224.426959", "www.example.test" },
+    { "nginx, empty hostname, 'host: ' in the request line", LOG_TYPE_NGINX, "1", "",
+      ", client: 192.0.2.10, server: www.example.test, request: \"GET /x host: \"evil\" HTTP/1.1\", host: \"real.example.test\"",
+      "real.example.test", "168142074224.426959", "www.example.test" },
     { "nginx, empty hostname, fake host in the referrer", LOG_TYPE_NGINX, "1", "",
       REAL ", host: \"real.example.test\", referrer: \"x\", host: \"evil.example.test\" [hostname \"evil\"]\"",
-      "real.example.test", "168142074224.426959", "www.example.test" },
+      "", "168142074224.426959", "www.example.test", 0, 0, NULL, 1 },
+    { "nginx, empty hostname, fake host in the request line", LOG_TYPE_NGINX, "1", "",
+      ", client: 192.0.2.10, server: www.example.test, request: \"GET /x\", host: \"evil\" HTTP/1.1\", host: \"real.example.test\"",
+      "", "168142074224.426959", "www.example.test", 0, 0, NULL, 1 },
     { "apache, fake fields in the referer", LOG_TYPE_APACHE, NULL, NULL,
       ", referer: " AP_FAKE_TAIL,
       "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
@@ -353,7 +364,10 @@ static void test_fake_fields_in_context(void) {
         parse(line, strlen(line), c->type, &l);
 
         // without a context the line is broken ("Can't find client field!")
-        int broken = c->ambiguous || c->tail_ambiguous || (c->server_exp == NULL && c->type == LOG_TYPE_NGINX);
+        int broken = c->ambiguous || c->tail_ambiguous || c->host_ambiguous
+                     || (c->server_exp == NULL && c->type == LOG_TYPE_NGINX);
+        CHECK(has_error(&l, "Ambiguous 'host: \"\"' field, the value isn't used!") == c->host_ambiguous,
+              "%s: host ambiguous error", c->name);
         CHECK(l.entry_is_modsecline == 1 && l.entry_is_broken == broken,
               "%s: modsecline %d broken %d", c->name, l.entry_is_modsecline, l.entry_is_broken);
         CHECK(has_error(&l, ERR_AMBIGUOUS_PART) == c->ambiguous, "%s: ambiguous error %d", c->name,
