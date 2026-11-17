@@ -1289,6 +1289,45 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
 }
 
 // line is a copy of the caller's line, it can be modified
+// the number of some fields in a terminated string (the ModSecurity part, or
+// a part of the line), counted in one pass that stops only at the '['s; every
+// check of the fields (modsec_part_end(), parse_copy()) uses it
+typedef struct field_counts {
+    int file;       // ' [file "'
+    int id;         // '[id "'
+    int hostname;   // '[hostname "'
+    int uri;        // '[uri "'
+    int unique_id;  // '[unique_id "'
+    int ref;        // '[ref "'
+} field_counts;
+
+static field_counts count_fields(const char *s) {
+    field_counts c = { 0, 0, 0, 0, 0, 0 };
+    const char *start = s;
+    while ((s = strchr(s, '[')) != NULL) {
+        if (s[1] == 'f' && strncmp(s, "[file \"", 7) == 0 && s > start && s[-1] == ' ') {
+            c.file++;
+        }
+        else if (s[1] == 'i' && strncmp(s, "[id \"", 5) == 0) {
+            c.id++;
+        }
+        else if (s[1] == 'h' && strncmp(s, "[hostname \"", 11) == 0) {
+            c.hostname++;
+        }
+        else if (s[1] == 'u' && strncmp(s, "[uri \"", 6) == 0) {
+            c.uri++;
+        }
+        else if (s[1] == 'u' && strncmp(s, "[unique_id \"", 12) == 0) {
+            c.unique_id++;
+        }
+        else if (s[1] == 'r' && strncmp(s, "[ref \"", 6) == 0) {
+            c.ref++;
+        }
+        s++;
+    }
+    return c;
+}
+
 // The server appends its own context to the ModSecurity message, and it
 // contains values of the request that aren't escaped: nginx writes
 // '[ while ACTION], client: ADDR, server: NAME[, request: "LINE"]...
@@ -1399,19 +1438,19 @@ static modsec_part modsec_part_end(const char *line, size_t from, size_t len, lo
         }
         p++;
     }
-    if (part.candidates == 0 && first < len
-        && strstr(line + from, " [file \"") == NULL && strstr(line + from, "[id \"") == NULL
-        && strstr(line + from, "[unique_id \"") == NULL) {
-        part.fieldend = first;
-        part.ctxpos = first;
+    if (part.candidates == 0 && first < len) {
+        field_counts c = count_fields(line + from);
+        if (c.file == 0 && c.id == 0 && c.unique_id == 0) {
+            part.fieldend = first;
+            part.ctxpos = first;
+        }
     }
     if (part.candidates > 1) {
         part.ambiguous = 1;
     }
     else if (part.candidates == 1 && (t == LOG_TYPE_APACHE || len >= NGX_MAX_ERROR_STR - 1)) {
-        const char *after = line + part.ctxpos;
-        if (strstr(after, " [file \"") != NULL || strstr(after, "[id \"") != NULL
-            || strstr(after, "[unique_id \"") != NULL || strstr(after, "[ref \"") != NULL) {
+        field_counts c = count_fields(line + part.ctxpos);
+        if (c.file > 0 || c.id > 0 || c.unique_id > 0 || c.ref > 0) {
             part.ambiguous = 1;
         }
     }
@@ -1585,36 +1624,6 @@ static size_t modsec_marker(const char *line, size_t len, loglinetype t) {
     }
     const char *p = mscl_find(line + offset, len - offset, " ModSecurity:", 13);
     return (p == NULL) ? len : (size_t)(p - line);
-}
-
-// the number of some fields of the ModSecurity part, counted in one pass that
-// stops only at the '['s (s is the terminated part)
-typedef struct field_counts {
-    int file;       // ' [file "'
-    int id;         // '[id "'
-    int hostname;   // '[hostname "'
-    int uri;        // '[uri "'
-} field_counts;
-
-static field_counts count_fields(const char *s) {
-    field_counts c = { 0, 0, 0, 0 };
-    const char *start = s;
-    while ((s = strchr(s, '[')) != NULL) {
-        if (s[1] == 'f' && strncmp(s, "[file \"", 7) == 0 && s > start && s[-1] == ' ') {
-            c.file++;
-        }
-        else if (s[1] == 'i' && strncmp(s, "[id \"", 5) == 0) {
-            c.id++;
-        }
-        else if (s[1] == 'h' && strncmp(s, "[hostname \"", 11) == 0) {
-            c.hostname++;
-        }
-        else if (s[1] == 'u' && strncmp(s, "[uri \"", 6) == 0) {
-            c.uri++;
-        }
-        s++;
-    }
-    return c;
 }
 
 // empties the pools, and sets every field to an empty string (parse() has
