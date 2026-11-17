@@ -60,6 +60,11 @@ v3.0.0 - 2026-11-16
     unused variables, the version of the module is MODULE_VERSION
     (phpversion() said 1.0)
   * Python and Ruby test scripts pass the length in bytes
+  * examples/example01.c doesn't clear logdata for every line, and
+    reads lines up to 2 * MSCLOG_LINE_BUFF_SIZE (a longer line was cut
+    into more records at 4096 bytes), and it's built with the header
+    of the source tree (a VPATH build, eg. make distcheck, used an
+    installed one)
   * pkg-config file: the version and the paths come from configure
     (it said 0.3.0, and had a fixed libdir)
   * Build: the version is only in src/msclogparser.h: configure

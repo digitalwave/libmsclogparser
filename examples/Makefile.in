@@ -108,7 +108,7 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_example01_OBJECTS = example01.$(OBJEXT)
 example01_OBJECTS = $(am_example01_OBJECTS)
-example01_LDADD = $(LDADD)
+example01_DEPENDENCIES = $(top_builddir)/src/libmsclogparser.la
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -342,8 +342,13 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-AM_CFLAGS = -I../src -L../src/.libs -lmsclogparser
+
+# the header of the source tree (not ../src, which is the build tree in a
+# VPATH build, eg. make distcheck, and not an installed older one), and the
+# library of the build tree
+AM_CPPFLAGS = -I$(top_srcdir)/src
 example01_SOURCES = example01.c
+example01_LDADD = $(top_builddir)/src/libmsclogparser.la
 all: all-am
 
 .SUFFIXES:

@@ -41,14 +41,21 @@ int main(int argc, char ** argv) {
         return 2;
     }
 
-    char line[4096] = {0};
+    // bigger than MSCLOG_LINE_BUFF_SIZE, so a too long line goes to parse(),
+    // which reports it; the rest of an even longer line is skipped
+    static char line[MSCLOG_LINE_BUFF_SIZE * 2];
     size_t li       = 0;
-    while (fgets (line, 4095, fp) != NULL) {
+    while (fgets (line, sizeof(line), fp) != NULL) {
         size_t len = strlen(line);
+        if (len == sizeof(line) - 1 && line[len-1] != '\n') {
+            int ch;
+            while ((ch = fgetc(fp)) != EOF && ch != '\n') {
+                ;
+            }
+        }
         if (len > 0) {
             printf("Nr: %zu\n", li++);
-            memset(&l, '\0', sizeof(logdata));
-            l.entry_is_modsecline = 0;
+            // parse() initializes l, it doesn't have to be cleared
             parse(line, len, t, &l);
             if (l.entry_is_modsecline == 1) {
                 printf("Type of log: '%s'\n", typeoflog[l.log_entry_class]);
@@ -105,7 +112,6 @@ int main(int argc, char ** argv) {
                 printf("Not a modsecurity line\n");
             }
             printf("======\n");
-            memset(line, '\0', 4096);
         }
     }
 
