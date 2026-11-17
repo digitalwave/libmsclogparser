@@ -320,6 +320,40 @@ static void test_fake_context_special(void) {
           l.log_rule_id, l.log_rule_file, l.log_unique_id);
     CHECK(l.log_entry_class == LOGMSG_WARNING, "cut line, fake context: class %d", l.log_entry_class);
 
+    // nginx cut the line right after a fake context in the [uri] (the
+    // decoded path of libmodsecurity3, it isn't escaped): the fake context is
+    // the only candidate, and no field follows it, but the fake [file] and
+    // [id] are the second ones
+    const char *uhead = "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Warning. Matched "
+        "\"Operator `Rx' with parameter `x' against variable `ARGS:q' (Value: `1' ) "
+        "[file \"/etc/crs/rules/REQUEST-941.conf\"] [line \"10\"] [id \"941160\"] [msg \"XSS\"] "
+        "[severity \"2\"] [tag \"attack-xss\"] [hostname \"www.example.test\"] [uri \"/";
+    const char *ufakes[] = {
+        " [file \"/fake.conf\"] [line \"1\"] [id \"1\"] [msg \"fake\"] [unique_id \"FAKEUID\"] "
+        "[ref \"x\"], client: 9.9.9.9, server: evil",
+        " [file \"/fake.conf\"] [line \"1\"] [id \"1\"] [msg \"fake\"] [hostname \"fakehost\"] [uri \"/fake\"] "
+        "[unique_id \"FAKEUID\"] [ref \"x\"], client: 9.9.9.9, server: evil",
+    };
+    for (int u = 0; u < 2; u++) {
+        size_t pad = NGX_MAX_LINE - strlen(uhead) - strlen(ufakes[u]);
+        char apad[2048];
+        memset(apad, 'A', pad);
+        apad[pad] = '\0';
+        snprintf(line, sizeof(line), "%s%s%s\"] [unique_id \"168142074224.426959\"] [ref \"o0,5v10,5\"], "
+                 "client: 192.0.2.10, server: www.example.test", uhead, apad, ufakes[u]);
+        line[NGX_MAX_LINE] = '\0';
+        CHECK(strstr(line, "server: evil") == line + NGX_MAX_LINE - 12, "cut in the uri %d: the line isn't cut there", u);
+        memset(&l, '\0', sizeof(l));
+        parse(line, strlen(line), LOG_TYPE_NGINX, &l);
+        CHECK(l.entry_is_broken == 1
+              && has_error(&l, "More [file] or [id] fields in the ModSecurity part, the fields aren't used!"),
+              "cut in the uri %d: broken %d", u, l.entry_is_broken);
+        CHECK(l.log_rule_file[0] == '\0' && l.log_rule_id[0] == '\0' && l.log_rule_msg[0] == '\0'
+              && l.log_unique_id[0] == '\0', "cut in the uri %d: file '%s' id '%s' msg '%s' uid '%s'", u,
+              l.log_rule_file, l.log_rule_id, l.log_rule_msg, l.log_unique_id);
+        CHECK(l.log_entry_class == LOGMSG_WARNING, "cut in the uri %d: class %d", u, l.log_entry_class);
+    }
+
     // a real cut line: the context is there, the request line is cut
     char req[2048];
     memset(req, 'a', 1500);

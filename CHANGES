@@ -17,7 +17,8 @@ v3.0.0 - 2026-11-16
     Nginx), if there are more such places (a fake one), or the only
     one is followed by fields on a line cut by Nginx, the fields
     aren't used (only the class and the message are kept), and an
-    error is reported; Nginx log_client and log_server are used only
+    error is reported - also if the ModSecurity part contains more
+    than one [file] or [id]; Nginx log_client and log_server are used only
     if their part is right after the ModSecurity part (or after the
     message of a line without fields)
   * Fix: [uri] and [unique_id] are searched after [hostname], not

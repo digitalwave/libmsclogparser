@@ -1658,6 +1658,16 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         char partendchr = line[partend];
         line[partend] = '\0';
         l->log_entry_raw_length = partend;
+        // a message has one [file] and one [id]: more of them mean fakes (in
+        // the message, or in the [uri] of libmodsecurity3), eg. on a line that
+        // nginx cut right after a fake context, so that one is its only
+        // candidate, and no field follows it
+        if (!part.ambiguous && (count_pattern(line + mpos + 13, " [file \"") > 1
+                                || count_pattern(line + mpos + 13, "[id \"") > 1)) {
+            part.ambiguous = 1;
+            set_error(l, "More [file] or [id] fields in the ModSecurity part, the fields aren't used!", mpos + 13,
+                      partend);
+        }
         if (t == LOG_TYPE_APACHE) {
             parse_date_apache(line, l);
         }
