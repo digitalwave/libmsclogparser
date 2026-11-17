@@ -135,6 +135,7 @@ AWK = @AWK@
 BINDING_ALL = @BINDING_ALL@
 BINDING_CLEAN = @BINDING_CLEAN@
 BINDING_INSTALL_EXEC = @BINDING_INSTALL_EXEC@
+BINDING_UNINSTALL = @BINDING_UNINSTALL@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -297,7 +298,6 @@ top_srcdir = @top_srcdir@
 @ENABLE_PYTHON_TRUE@                --ignore-installed \
 @ENABLE_PYTHON_TRUE@                --no-build-isolation .
 
-@ENABLE_PYTHON_TRUE@PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mscpylogparser*
 @ENABLE_LUA_TRUE@LUALIBFLAG = -shared -fpic
 @ENABLE_LUA_TRUE@LUACFLAGS = -I../src $(LUA_INCLUDE) -L../src/.libs 
 @ENABLE_RUBY_TRUE@RUBYLIBFLAG = -shared -fPIC -L$(RUBY_ARCHLIBDIR)
@@ -479,7 +479,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am:
+uninstall-am: uninstall-local
 
 .MAKE: install-am install-strip
 
@@ -494,7 +494,7 @@ uninstall-am:
 	install-strip installcheck installcheck-am installdirs \
 	maintainer-clean maintainer-clean-generic mostlyclean \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags-am uninstall uninstall-am
+	tags-am uninstall uninstall-am uninstall-local
 
 .PRECIOUS: Makefile
 
@@ -504,6 +504,13 @@ uninstall-am:
 @ENABLE_PYTHON_TRUE@	--build-base $(shell readlink -f $(builddir))/build \
 @ENABLE_PYTHON_TRUE@	--verbose)
 
+# pip installs the module and its dist-info into the platlib directory of the
+# interpreter (eg. /usr/local/lib/python3.X/dist-packages on Debian,
+# site-packages elsewhere), under DESTDIR
+@ENABLE_PYTHON_TRUE@uninstall-py:
+@ENABLE_PYTHON_TRUE@	site=`$(PYTHON) -c "import sysconfig; print(sysconfig.get_path('platlib'))"` && \
+@ENABLE_PYTHON_TRUE@	rm -rf "$(DESTDIR)$$site"/mscpylogparser*
+
 @ENABLE_PYTHON_TRUE@clean-py:
 @ENABLE_PYTHON_TRUE@	rm -rf *.o *.so *.la build
 
@@ -511,8 +518,11 @@ uninstall-am:
 @ENABLE_LUA_TRUE@	$(CC) $(LUACFLAGS) $(LUALIBFLAG) -o msclualogparser.so luabinding.c $(LUA_LIB) -lmsclogparser
 
 @ENABLE_LUA_TRUE@install-exec-lua:
-@ENABLE_LUA_TRUE@	mkdir -p $(luaexecdir)
-@ENABLE_LUA_TRUE@	$(INSTALL) msclualogparser.so $(luaexecdir)
+@ENABLE_LUA_TRUE@	mkdir -p $(DESTDIR)$(luaexecdir)
+@ENABLE_LUA_TRUE@	$(INSTALL) msclualogparser.so $(DESTDIR)$(luaexecdir)
+
+@ENABLE_LUA_TRUE@uninstall-lua:
+@ENABLE_LUA_TRUE@	rm -f $(DESTDIR)$(luaexecdir)/msclualogparser.so
 
 @ENABLE_LUA_TRUE@clean-lua:
 @ENABLE_LUA_TRUE@	rm -f msclualogparser.so
@@ -521,8 +531,11 @@ uninstall-am:
 @ENABLE_RUBY_TRUE@	$(CC) $(RUBYCFLAGS) $(RUBYLIBFLAG) -o mscrubylogparser.so rubybinding.c $(RUBY_LIBRUBYARG) -lmsclogparser
 
 @ENABLE_RUBY_TRUE@install-exec-ruby:
-@ENABLE_RUBY_TRUE@	mkdir -p $(RUBY_VENDORARCHDIR)
-@ENABLE_RUBY_TRUE@	$(INSTALL) mscrubylogparser.so $(RUBY_VENDORARCHDIR)
+@ENABLE_RUBY_TRUE@	mkdir -p $(DESTDIR)$(RUBY_VENDORARCHDIR)
+@ENABLE_RUBY_TRUE@	$(INSTALL) mscrubylogparser.so $(DESTDIR)$(RUBY_VENDORARCHDIR)
+
+@ENABLE_RUBY_TRUE@uninstall-ruby:
+@ENABLE_RUBY_TRUE@	rm -f $(DESTDIR)$(RUBY_VENDORARCHDIR)/mscrubylogparser.so
 
 @ENABLE_RUBY_TRUE@clean-ruby:
 @ENABLE_RUBY_TRUE@	rm -f mscrubylogparser.so
@@ -533,8 +546,11 @@ uninstall-am:
 @ENABLE_PHP_TRUE@	$(CC) -L../src/.libs -shared -fPIC -DPIC phpbinding.o -Wl,-soname -Wl,mscphplogparser.so -o mscphplogparser.so -lmsclogparser
 
 @ENABLE_PHP_TRUE@install-exec-php:
-@ENABLE_PHP_TRUE@	mkdir -p $(PHP_EXT_DIR)
-@ENABLE_PHP_TRUE@	$(INSTALL) mscphplogparser.so $(PHP_EXT_DIR)
+@ENABLE_PHP_TRUE@	mkdir -p $(DESTDIR)$(PHP_EXT_DIR)
+@ENABLE_PHP_TRUE@	$(INSTALL) mscphplogparser.so $(DESTDIR)$(PHP_EXT_DIR)
+
+@ENABLE_PHP_TRUE@uninstall-php:
+@ENABLE_PHP_TRUE@	rm -f $(DESTDIR)$(PHP_EXT_DIR)/mscphplogparser.so
 
 @ENABLE_PHP_TRUE@clean-php:
 @ENABLE_PHP_TRUE@	rm -f mscphplogparser.so phpbinding.o
@@ -547,6 +563,9 @@ all-local:
 install-exec-local:
 	test -z "$(BINDING_INSTALL_EXEC)" || $(MAKE) $(BINDING_INSTALL_EXEC)
 	$(PYTHON_INSTALL_CMD)
+
+uninstall-local:
+	test -z "$(BINDING_UNINSTALL)" || $(MAKE) $(BINDING_UNINSTALL)
 
 clean-local:
 	test -z "$(BINDING_CLEAN)" || $(MAKE) $(BINDING_CLEAN)

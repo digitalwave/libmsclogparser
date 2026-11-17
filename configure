@@ -640,6 +640,7 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 LIBOBJS
+BINDING_UNINSTALL
 BINDING_CLEAN
 BINDING_INSTALL_EXEC
 BINDING_ALL
@@ -14714,6 +14715,7 @@ esac
 BINDING_ALL=""
 BINDING_INSTALL_EXEC=""
 BINDING_CLEAN=""
+BINDING_UNINSTALL=""
 
 { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether to build Python binding" >&5
 printf %s "checking whether to build Python binding... " >&6; }
@@ -15201,6 +15203,7 @@ printf '%s\n' "#define HAVE_PYTHON 1" >>confdefs.h
 fi
         BINDING_ALL="${BINDING_ALL} all-py"
         BINDING_CLEAN="${BINDING_CLEAN} clean-py"
+        BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-py"
 
 else case e in #(
   e) { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
@@ -16064,6 +16067,7 @@ fi
         BINDING_ALL="${BINDING_ALL} all-lua"
         BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-lua"
         BINDING_CLEAN="${BINDING_CLEAN} clean-lua"
+        BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-lua"
 
 
 
@@ -16266,6 +16270,7 @@ fi
     BINDING_ALL="${BINDING_ALL} all-ruby"
     BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-ruby"
     BINDING_CLEAN="${BINDING_CLEAN} clean-ruby"
+    BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-ruby"
 
     CPPFLAGS="$OLD_CPPFLAGS"
     LDFLAGS="$OLD_LDFLAGS"
@@ -16418,6 +16423,7 @@ done
     BINDING_ALL="${BINDING_ALL} all-php"
     BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-php"
     BINDING_CLEAN="${BINDING_CLEAN} clean-php"
+    BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-php"
 
     CPPFLAGS="$OLD_CPPFLAGS"
     CFLAGS="$OLD_CFLAGS"
@@ -16443,6 +16449,7 @@ else
   ENABLE_PHP_TRUE='#'
   ENABLE_PHP_FALSE=
 fi
+
 
 
 

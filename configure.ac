@@ -68,6 +68,7 @@ esac
 BINDING_ALL=""
 BINDING_INSTALL_EXEC=""
 BINDING_CLEAN=""
+BINDING_UNINSTALL=""
 
 dnl Check if user wants Python3 binding
 AC_MSG_CHECKING([whether to build Python binding])
@@ -111,6 +112,7 @@ AS_IF([test "x$wantpythonbinding" = xtrue],
         )
         BINDING_ALL="${BINDING_ALL} all-py"
         BINDING_CLEAN="${BINDING_CLEAN} clean-py"
+        BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-py"
 	],
     [AC_MSG_RESULT([no])]
 )
@@ -137,6 +139,7 @@ AS_IF(
         BINDING_ALL="${BINDING_ALL} all-lua"
         BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-lua"
         BINDING_CLEAN="${BINDING_CLEAN} clean-lua"
+        BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-lua"
 
         AC_SUBST(LUA_INCLUDE)
         AC_SUBST(LUA_LIB)
@@ -191,6 +194,7 @@ AS_IF([test "x$wantrubybinding" = xtrue],[
     BINDING_ALL="${BINDING_ALL} all-ruby"
     BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-ruby"
     BINDING_CLEAN="${BINDING_CLEAN} clean-ruby"
+    BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-ruby"
 
     CPPFLAGS="$OLD_CPPFLAGS"
     LDFLAGS="$OLD_LDFLAGS"
@@ -251,6 +255,7 @@ AS_IF([test "x$wantphpbinding" = xtrue],[
     BINDING_ALL="${BINDING_ALL} all-php"
     BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-php"
     BINDING_CLEAN="${BINDING_CLEAN} clean-php"
+    BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-php"
 
     CPPFLAGS="$OLD_CPPFLAGS"
     CFLAGS="$OLD_CFLAGS"
@@ -271,6 +276,7 @@ AM_CONDITIONAL([ENABLE_PHP],[test "x$wantphpbinding" = xtrue])
 AC_SUBST([BINDING_ALL])
 AC_SUBST([BINDING_INSTALL_EXEC])
 AC_SUBST([BINDING_CLEAN])
+AC_SUBST([BINDING_UNINSTALL])
 
 AC_OUTPUT
 

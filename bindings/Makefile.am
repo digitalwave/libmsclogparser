@@ -11,7 +11,12 @@ PYTHON_INSTALL_CMD = pip install --root=$(DESTDIR)/ \
                 --ignore-installed \
                 --no-build-isolation .
 
-PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mscpylogparser*
+# pip installs the module and its dist-info into the platlib directory of the
+# interpreter (eg. /usr/local/lib/python3.X/dist-packages on Debian,
+# site-packages elsewhere), under DESTDIR
+uninstall-py:
+	site=`$(PYTHON) -c "import sysconfig; print(sysconfig.get_path('platlib'))"` && \
+	rm -rf "$(DESTDIR)$$site"/mscpylogparser*
 
 
 clean-py:
@@ -31,8 +36,11 @@ all-lua: luabinding.c
 	$(CC) $(LUACFLAGS) $(LUALIBFLAG) -o msclualogparser.so luabinding.c $(LUA_LIB) -lmsclogparser
 
 install-exec-lua:
-	mkdir -p $(luaexecdir)
-	$(INSTALL) msclualogparser.so $(luaexecdir)
+	mkdir -p $(DESTDIR)$(luaexecdir)
+	$(INSTALL) msclualogparser.so $(DESTDIR)$(luaexecdir)
+
+uninstall-lua:
+	rm -f $(DESTDIR)$(luaexecdir)/msclualogparser.so
 
 clean-lua:
 	rm -f msclualogparser.so
@@ -48,8 +56,11 @@ all-ruby: rubybinding.c
 	$(CC) $(RUBYCFLAGS) $(RUBYLIBFLAG) -o mscrubylogparser.so rubybinding.c $(RUBY_LIBRUBYARG) -lmsclogparser
 
 install-exec-ruby:
-	mkdir -p $(RUBY_VENDORARCHDIR)
-	$(INSTALL) mscrubylogparser.so $(RUBY_VENDORARCHDIR)
+	mkdir -p $(DESTDIR)$(RUBY_VENDORARCHDIR)
+	$(INSTALL) mscrubylogparser.so $(DESTDIR)$(RUBY_VENDORARCHDIR)
+
+uninstall-ruby:
+	rm -f $(DESTDIR)$(RUBY_VENDORARCHDIR)/mscrubylogparser.so
 
 clean-ruby:
 	rm -f mscrubylogparser.so
@@ -64,8 +75,11 @@ all-php: phpbinding.c
 	$(CC) -L../src/.libs -shared -fPIC -DPIC phpbinding.o -Wl,-soname -Wl,mscphplogparser.so -o mscphplogparser.so -lmsclogparser
 
 install-exec-php:
-	mkdir -p $(PHP_EXT_DIR)
-	$(INSTALL) mscphplogparser.so $(PHP_EXT_DIR)
+	mkdir -p $(DESTDIR)$(PHP_EXT_DIR)
+	$(INSTALL) mscphplogparser.so $(DESTDIR)$(PHP_EXT_DIR)
+
+uninstall-php:
+	rm -f $(DESTDIR)$(PHP_EXT_DIR)/mscphplogparser.so
 
 clean-php:
 	rm -f mscphplogparser.so phpbinding.o
@@ -81,6 +95,9 @@ all-local:
 install-exec-local:
 	test -z "$(BINDING_INSTALL_EXEC)" || $(MAKE) $(BINDING_INSTALL_EXEC)
 	$(PYTHON_INSTALL_CMD)
+
+uninstall-local:
+	test -z "$(BINDING_UNINSTALL)" || $(MAKE) $(BINDING_UNINSTALL)
 
 clean-local:
 	test -z "$(BINDING_CLEAN)" || $(MAKE) $(BINDING_CLEAN)
