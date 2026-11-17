@@ -263,6 +263,66 @@ static const fake_fields_case fake_cases[] = {
       "www.example.test", "Zc3-aHFzNBf8HIsK4ZQ", NULL },
 };
 
+// lines that aren't in the table: a cut line, and a line without fields
+static void build_cut_fake(char *line, size_t size, const char *head, const char *fields, size_t pad) {
+    char name[2048];
+    snprintf(name, sizeof(name), "v' ) [file \"/evil.conf\"] [line \"1\"] [id \"1\"] [msg \"evil\"] "
+             "[hostname \"evil.example.test\"] [uri \"/evil\"] [unique_id \"EVIL\"] [ref \"\"], client: 192.0.2.66, "
+             "server: evil.example.test%0*d", (int)pad, 0);
+    snprintf(line, size, "%s%s%s, client: 192.0.2.10, server: www.example.test", head, name, fields);
+}
+
+static void test_fake_context_special(void) {
+    logdata l;
+    char line[8192];
+    const char *head = "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Warning. Matched "
+        "\"Operator `Rx' with parameter `x' against variable `ARGS_NAMES:";
+    const char *fields = "' ) [file \"/etc/crs/rules/REQUEST-942.conf\"] [line \"10\"] [id \"942100\"] "
+        "[msg \"SQL Injection\"] [severity \"2\"] [tag \"attack-sqli\"] [hostname \"www.example.test\"] "
+        "[uri \"/\"] [unique_id \"168142074224.426959\"] [ref \"o0,5v10,5\"]";
+
+    // nginx cut the line after the real fields, before the real context: the
+    // fake context in the matched value is the only candidate, but the real
+    // fields follow it
+    const char *qhead = "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Warning. Matched "
+        "\"Operator `Rx' with parameter `x' against variable `ARGS:q' (Value: `";
+    build_cut_fake(line, sizeof(line), qhead, fields, 1);
+    size_t endpos = strstr(line, "[ref \"o0,5v10,5\"]") - line + 17;
+    build_cut_fake(line, sizeof(line), qhead, fields, 1 + (NGX_MAX_LINE - 10 - endpos));
+    line[NGX_MAX_LINE] = '\0';
+    CHECK(strstr(line, "[ref \"o0,5v10,5\"]") != NULL && strstr(line, "192.0.2.10") == NULL,
+          "cut line: the real fields aren't there, or the real context isn't cut");
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_NGINX, &l);
+    CHECK(l.entry_is_broken == 1 && has_error(&l, ERR_AMBIGUOUS_PART), "cut line, fake context: broken %d",
+          l.entry_is_broken);
+    CHECK(l.log_rule_id[0] == '\0' && l.log_rule_file[0] == '\0' && l.log_unique_id[0] == '\0'
+          && l.log_hostname[0] == '\0' && l.log_client[0] == '\0', "cut line, fake context: id '%s' file '%s' uid '%s'",
+          l.log_rule_id, l.log_rule_file, l.log_unique_id);
+    CHECK(l.log_entry_class == LOGMSG_WARNING, "cut line, fake context: class %d", l.log_entry_class);
+
+    // a real cut line: the context is there, the request line is cut
+    char req[2048];
+    memset(req, 'a', 1500);
+    req[1500] = '\0';
+    snprintf(line, sizeof(line), "%sq' (Value: `1%s, client: 192.0.2.10, server: www.example.test, request: \"GET /?q=%s",
+             head, fields, req);
+    line[NGX_MAX_LINE] = '\0';
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_NGINX, &l);
+    CHECK(!has_error(&l, ERR_AMBIGUOUS_PART) && strcmp(l.log_rule_id, "942100") == 0
+          && strcmp(l.log_unique_id, "168142074224.426959") == 0, "real cut line: id '%s' uid '%s'", l.log_rule_id,
+          l.log_unique_id);
+
+    // a message without fields: log_client and log_server come from its context
+    snprintf(line, sizeof(line), "2026/10/20 12:00:00 [error] 59513#59513: *1 ModSecurity: Request body processing "
+             "error, client: 192.0.2.10, server: www.example.test, request: \"GET / HTTP/1.1\", host: \"h\"");
+    memset(&l, '\0', sizeof(l));
+    parse(line, strlen(line), LOG_TYPE_NGINX, &l);
+    CHECK(strcmp(l.log_client, "192.0.2.10") == 0 && strcmp(l.log_server, "www.example.test") == 0,
+          "no fields: client '%s' server '%s'", l.log_client, l.log_server);
+}
+
 static void test_fake_fields_in_context(void) {
     for (size_t i = 0; i < sizeof(fake_cases) / sizeof(fake_cases[0]); i++) {
         const fake_fields_case *c = &fake_cases[i];
@@ -291,6 +351,9 @@ static void test_fake_fields_in_context(void) {
         CHECK(has_error(&l, ERR_AMBIGUOUS_PART) == c->ambiguous, "%s: ambiguous error %d", c->name,
               has_error(&l, ERR_AMBIGUOUS_PART));
         if (c->ambiguous) {
+            // the class and the message are kept
+            CHECK(l.log_entry_class == LOGMSG_WARNING && strncmp(l.log_modsec_msg, "Warning. ", 9) == 0,
+                  "%s: class %d msg '%.20s'", c->name, l.log_entry_class, l.log_modsec_msg);
             // no field is used, neither the real nor the fake one
             CHECK(l.log_rule_file[0] == '\0' && l.log_rule_id[0] == '\0' && l.log_rule_msg[0] == '\0'
                   && l.log_rule_tags_cnt == 0 && l.log_hostname[0] == '\0' && l.log_uri[0] == '\0'
@@ -328,6 +391,7 @@ static void test_fake_fields_in_context(void) {
 
 int main(void) {
     test_fake_fields_in_context();
+    test_fake_context_special();
     size_t n = sizeof(cases) / sizeof(cases[0]);
     for (size_t i = 0; i < n; i++) {
         const server_case *c = &cases[i];

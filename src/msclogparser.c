@@ -919,6 +919,24 @@ static void parse_ngx_context(char *line, size_t ctxpos, logdata *l) {
     return;
 }
 
+// the ModSecurity message: from pos (the ' ' after 'ModSecurity:') to end
+static void set_modsec_msg(const char *line, size_t pos, size_t end, logdata *l) {
+    char tbuff[MSCLOG_TBUFF_SIZE];
+    int pi = 0;
+    size_t msgstart = pos+1 + utf8_cut_start(line, pos+1);
+    for(size_t k = msgstart; k < end && pi < MSCLOG_TBUFF_SIZE-1; k++) {
+        tbuff[pi++] = line[k];
+    }
+    tbuff[pi] = '\0';
+    if (msgstart+pi < end) {
+        set_error(l, "ModSecurity message is truncated!", pos+1, end);
+        pi = utf8_cut_len(tbuff, pi, line[msgstart+pi]);
+    }
+    l->log_modsec_msg = mscl_stradd(l, tbuff, pi);
+    // the pool can truncate the message too
+    l->log_modsec_msg_length = strlen(l->log_modsec_msg);
+}
+
 static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linetype, size_t fulllen) {
 
     size_t matches[2], prevstart;
@@ -929,20 +947,7 @@ static int parse_regular(char * line, size_t *pos, logdata *l, loglinetype linet
     memset(matches, '\0', sizeof(size_t)*2);
     mcnt = find_pattern(line, *pos, l->log_entry_raw_length, " [file \"", 8, &matches, MATCH_LAST);
     if (mcnt > 0) {
-        char tbuff[MSCLOG_TBUFF_SIZE];
-        int pi = 0;
-        size_t msgstart = *pos+1 + utf8_cut_start(line, *pos+1);
-        for(size_t k = msgstart; k < matches[0] && pi < MSCLOG_TBUFF_SIZE-1; k++) {
-            tbuff[pi++] = line[k];
-        }
-        tbuff[pi] = '\0';
-        if (msgstart+pi < matches[0]) {
-            set_error(l, "ModSecurity message is truncated!", *pos+1, matches[0]);
-            pi = utf8_cut_len(tbuff, pi, line[msgstart+pi]);
-        }
-        l->log_modsec_msg = mscl_stradd(l, tbuff, pi);
-        // the pool can truncate the message too
-        l->log_modsec_msg_length = strlen(l->log_modsec_msg);
+        set_modsec_msg(line, *pos, matches[0], l);
     }
     else {
         // if no ' [file ' pattern, the line is broken
@@ -1291,12 +1296,17 @@ static void parse_rule_error(char * line, size_t *pos, logdata *l, loglinetype l
 // escape the '"' in the variable name and value of the match message, [msg],
 // [hostname] and [uri]. So neither the first nor the last candidate can be
 // trusted: if there is more than one, the end of the ModSecurity part is
-// ambiguous, and no field is used (an injection can hide the fields, but
-// can't replace them).
+// ambiguous, and the fields aren't used (an injection can hide the fields,
+// but can't replace them); the class and the message are kept.
+// nginx cuts the line at NGX_MAX_ERROR_STR, and then the real context can be
+// lost, while a fake one in the message remains as the only candidate; but
+// in the message the rest of the real message follows it, with its fields:
+// a single candidate of a cut line is ambiguous if a field follows it.
 typedef struct modsec_part {
     size_t fieldend;    // the end of the last field, the fields are before it
     size_t ctxpos;      // the position of the context marker, or len
     int    candidates;  // the number of the candidates
+    int    ambiguous;   // more candidates, or a doubtful one on a cut line
 } modsec_part;
 
 // the position after the last field ([unique_id "..."] or [ref "..."]) if
@@ -1343,7 +1353,7 @@ static size_t last_field_end(const char *line, size_t from, size_t pos, loglinet
 static modsec_part modsec_part_end(const char *line, size_t from, size_t len, loglinetype t) {
     const char *marker = (t == LOG_TYPE_NGINX) ? ", client: " : ", referer: ";
     size_t mlen = strlen(marker);
-    modsec_part part = { len, len, 0 };
+    modsec_part part = { len, len, 0, 0 };
     size_t first = len;
     const char *p = line + from;
 
@@ -1378,6 +1388,16 @@ static modsec_part modsec_part_end(const char *line, size_t from, size_t len, lo
         && strstr(line + from, "[unique_id \"") == NULL) {
         part.fieldend = first;
         part.ctxpos = first;
+    }
+    if (part.candidates > 1) {
+        part.ambiguous = 1;
+    }
+    else if (part.candidates == 1 && t == LOG_TYPE_NGINX && len >= NGX_MAX_ERROR_STR - 1) {
+        const char *after = line + part.ctxpos;
+        if (strstr(after, " [file \"") != NULL || strstr(after, "[id \"") != NULL
+            || strstr(after, "[unique_id \"") != NULL || strstr(after, "[ref \"") != NULL) {
+            part.ambiguous = 1;
+        }
     }
     return part;
 }
@@ -1579,10 +1599,10 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // modsec_part_end(); log_entry_raw_length is set back to len after it
         modsec_part part = modsec_part_end(line, matches[0] + matches[1], len, t);
         size_t partend = part.fieldend;
-        if (part.candidates > 1) {
-            // ambiguous end: no field is used
+        if (part.ambiguous) {
+            // the line is parsed until the first candidate, but only the class
+            // and the message are used, see below
             set_error(l, "Ambiguous end of the ModSecurity part, the fields aren't used!", part.ctxpos, len);
-            partend = matches[0] + matches[1];
         }
         char partendchr = line[partend];
         line[partend] = '\0';
@@ -1598,6 +1618,7 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // '... ModSecurity: '
         //              ~~~^
         size_t toffset = matches[0] + matches[1];
+        size_t msgpos = toffset;
         int rc = 0;
         if (t == LOG_TYPE_APACHE) {
             rc = parse_apache_part(line, toffset, len, l);
@@ -1609,13 +1630,25 @@ static int parse_copy(char * line, size_t len, loglinetype t, logdata * l) {
         // the context is parsed on the whole line
         line[partend] = partendchr;
         l->log_entry_raw_length = len;
+        if (part.ambiguous) {
+            // the fields of the rule and the tail may be fakes
+            for (int f = LOGFIELD_LOG_RULE_FILE; f <= LOGFIELD_LOG_UNIQUE_ID; f++) {
+                l->fields[f] = mscl_emptystr;
+            }
+            l->log_rule_tags_cnt = 0;
+            // the message is kept; if the first candidate is in it (no [file]
+            // before), it's the text until that
+            if (l->log_modsec_msg[0] == '\0' && part.fieldend > msgpos + 1) {
+                set_modsec_msg(line, msgpos, part.fieldend, l);
+            }
+        }
         if (rc != 0) {
             return rc;
         }
 
         if (t == LOG_TYPE_NGINX) {
             // log_client and log_server
-            parse_ngx_context(line, part.candidates == 1 ? part.ctxpos : len, l);
+            parse_ngx_context(line, part.ambiguous ? len : part.ctxpos, l);
             // classify the message only if the nginx context is in the line
             memset(&matches, '\0', sizeof(size_t)*2);
             mcnt = find_pattern(line, toffset, len, ", client: ", 10, &matches, MATCH_FIRST);
