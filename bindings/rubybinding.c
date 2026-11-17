@@ -59,10 +59,10 @@ modsecurity@digitalwave.hu
 
 static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE arg3) {
 
-    // a NUL character in the line is reported by parse(), like in the other
-    // bindings (StringValueCStr() would raise an ArgumentError for it)
-    const char  *line  = StringValuePtr(arg1);
-    size_t       linelen = RSTRING_LEN(arg1);
+    // the conversions can run Ruby code (to_str, to_int), which can change or
+    // free the buffer of the line: the pointer and the length are taken after
+    // all of them
+    StringValue(arg1);
     ssize_t      slen  = NUM2SSIZET(arg2);
     if (slen < 0) {
         rb_raise(rb_eArgError, "len must not be negative");
@@ -73,6 +73,10 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
         rb_raise(rb_eArgError, "ltype must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
     }
     loglinetype  ltype = (loglinetype)itype;
+    // a NUL character in the line is reported by parse(), like in the other
+    // bindings (StringValueCStr() would raise an ArgumentError for it)
+    const char  *line  = RSTRING_PTR(arg1);
+    size_t       linelen = RSTRING_LEN(arg1);
     // the values are parts of the line, they get its encoding
     rb_encoding *enc   = rb_enc_get(arg1);
 
@@ -86,6 +90,8 @@ static VALUE mscrubylogparser_parse(VALUE self, VALUE arg1, VALUE arg2, VALUE ar
 
     logdata l;
     parse(line, len, ltype, &l);
+    // the line is used until here
+    RB_GC_GUARD(arg1);
     if (lenerr) {
         l.entry_is_broken = 1;
     }

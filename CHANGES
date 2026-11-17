@@ -41,7 +41,9 @@ v3.0.0 - 2026-11-16
     build with setuptools instead of distutils
   * Ruby binding: parse() and the constants are in the
     MscRubyLogParser module (API change), new entry_is_modsecline,
-    the values get the encoding of the line
+    the values get the encoding of the line, the pointer of the line
+    is taken after the conversions of the arguments (a to_int could
+    free its buffer)
   * Lua binding: new entry_is_broken, the constants are integers
   * PHP binding: fix the TSRM cache macro of ZTS builds, remove
     unused variables
