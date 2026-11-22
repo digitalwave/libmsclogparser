@@ -6,12 +6,24 @@ all-py: pybinding.c
 	--build-base $(shell readlink -f $(builddir))/build \
 	--verbose)
 
-PYTHON_INSTALL_CMD = pip install --root=$(DESTDIR)/ \
+# the pip of $(PYTHON), so the module is installed for the same interpreter
+# that uninstall-py asks for its directories
+PYTHON_INSTALL_CMD = $(PYTHON) -m pip install --root=$(DESTDIR)/ \
                 --no-deps \
                 --ignore-installed \
                 --no-build-isolation .
 
-PYTHON_UNINSTALL_CMD = rm -rf $(DESTDIR)$(libdir)/python*/dist-packages/mypylogparser*
+# pip installs the module and its dist-info into one directory, by its own
+# scheme (eg. /usr/local/lib/python3.X/dist-packages on Debian): only that one
+# is cleaned under DESTDIR, so a module installed by something else (eg. a
+# distribution package in /usr/lib/python3/dist-packages) isn't removed. The
+# directory comes from pip itself, or from the default scheme of sysconfig if
+# that internal function isn't there.
+PYTHON_PIP_PLATLIB = from pip._internal.locations import get_scheme; print(get_scheme("mscpylogparser").platlib)
+PYTHON_SYSCONFIG_PLATLIB = import sysconfig; print(sysconfig.get_path("platlib"))
+uninstall-py:
+	d=`$(PYTHON) -c '$(PYTHON_PIP_PLATLIB)' 2>/dev/null || $(PYTHON) -c '$(PYTHON_SYSCONFIG_PLATLIB)'` && \
+	test -n "$$d" && rm -rf "$(DESTDIR)$$d"/mscpylogparser*
 
 
 clean-py:
@@ -31,8 +43,11 @@ all-lua: luabinding.c
 	$(CC) $(LUACFLAGS) $(LUALIBFLAG) -o msclualogparser.so luabinding.c $(LUA_LIB) -lmsclogparser
 
 install-exec-lua:
-	mkdir -p $(luaexecdir)
-	$(INSTALL) msclualogparser.so $(luaexecdir)
+	mkdir -p $(DESTDIR)$(luaexecdir)
+	$(INSTALL) msclualogparser.so $(DESTDIR)$(luaexecdir)
+
+uninstall-lua:
+	rm -f $(DESTDIR)$(luaexecdir)/msclualogparser.so
 
 clean-lua:
 	rm -f msclualogparser.so
@@ -48,8 +63,11 @@ all-ruby: rubybinding.c
 	$(CC) $(RUBYCFLAGS) $(RUBYLIBFLAG) -o mscrubylogparser.so rubybinding.c $(RUBY_LIBRUBYARG) -lmsclogparser
 
 install-exec-ruby:
-	mkdir -p $(RUBY_VENDORARCHDIR)
-	$(INSTALL) mscrubylogparser.so $(RUBY_VENDORARCHDIR)
+	mkdir -p $(DESTDIR)$(RUBY_VENDORARCHDIR)
+	$(INSTALL) mscrubylogparser.so $(DESTDIR)$(RUBY_VENDORARCHDIR)
+
+uninstall-ruby:
+	rm -f $(DESTDIR)$(RUBY_VENDORARCHDIR)/mscrubylogparser.so
 
 clean-ruby:
 	rm -f mscrubylogparser.so
@@ -64,8 +82,11 @@ all-php: phpbinding.c
 	$(CC) -L../src/.libs -shared -fPIC -DPIC phpbinding.o -Wl,-soname -Wl,mscphplogparser.so -o mscphplogparser.so -lmsclogparser
 
 install-exec-php:
-	mkdir -p $(PHP_EXT_DIR)
-	$(INSTALL) mscphplogparser.so $(PHP_EXT_DIR)
+	mkdir -p $(DESTDIR)$(PHP_EXT_DIR)
+	$(INSTALL) mscphplogparser.so $(DESTDIR)$(PHP_EXT_DIR)
+
+uninstall-php:
+	rm -f $(DESTDIR)$(PHP_EXT_DIR)/mscphplogparser.so
 
 clean-php:
 	rm -f mscphplogparser.so phpbinding.o
@@ -81,6 +102,9 @@ all-local:
 install-exec-local:
 	test -z "$(BINDING_INSTALL_EXEC)" || $(MAKE) $(BINDING_INSTALL_EXEC)
 	$(PYTHON_INSTALL_CMD)
+
+uninstall-local:
+	test -z "$(BINDING_UNINSTALL)" || $(MAKE) $(BINDING_UNINSTALL)
 
 clean-local:
 	test -z "$(BINDING_CLEAN)" || $(MAKE) $(BINDING_CLEAN)

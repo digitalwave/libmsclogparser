@@ -61,7 +61,9 @@ The purpose of this project is to analyze the "always present" log output of Mod
 
 The writing of the code was preceded by thorough research. The expectation was that a method that knew all log formats and could recognize and show truncated (or duplicated) fields produced during known procedures.
 
-Even though the code is written in C, but it does not use any dynamic memory handling. It also does not have any library dependecy (eg. PCRE/PCRE2). Therefore it's really fast and convenience to use it.
+Even though the code is written in C, but it does not use any dynamic memory handling: `parse()` copies the line to a buffer in the `logdata` structure (`linebuf`), so a line of `MSCLOG_LINE_BUFF_SIZE` (8192) bytes or longer (without the line ending) can't be parsed, `parse()` reports an error for it: the fields are empty, `entry_is_broken` is 1, and `entry_is_modsecline` is 1 if it's a ModSecurity line. A line that contains a NUL character (except at its end) isn't parsed either, the same way, with the error `The line contains a NUL character, it can't be parsed!`; the bindings handle it the same way, they don't raise an error for it. It also does not have any library dependecy (eg. PCRE/PCRE2). Therefore it's really fast and convenience to use it.
+
+The web server appends its own context to the ModSecurity message (Nginx: `, client: ADDR, server: NAME, request: "...", host: "...", referrer: "..."`, Apache: `, referer: ...`), and it contains values sent by the client without escaping. The ModSecurity fields (`[file]`, `[id]`, `[msg]`, `[hostname]`, `[unique_id]`, ...) are searched only before this context, so fake fields in the request line or in a header can't replace the real ones. The end of the ModSecurity part is the context right after its last field (`[unique_id "..."]` or `[ref "..."]`, on Nginx optionally followed by ` while ACTION`). A fake one can be both in the context and in the message (libmodsecurity3 doesn't escape the `"` in the variable name and value of the match message), so if there is more than one, the end is ambiguous: the fields of the rule (`[file]`, `[id]`, `[msg]`, `[tag]`, ...) and of the tail (`[hostname]`, `[uri]`, `[unique_id]`) aren't used, only the class (`log_entry_class`) and the message (`log_modsec_msg`) are kept, the line is broken, and the error is `Ambiguous end of the ModSecurity part, the fields aren't used!` (an injection can hide the fields, but can't replace them). The same applies if the only context is followed by fields on a line where the real context can be missing (Apache writes `, referer: ` only if there is a Referer header, and Nginx cuts the line at 2047 bytes): then it's a fake one in the message; and if the ModSecurity part contains more than one `[file "` or `[id "` (a message has only one, more of them are fakes, eg. in the `[uri]` of a line that Nginx cut right after a fake context), with the error `More [file] or [id] fields in the ModSecurity part, the fields aren't used!`. libmodsecurity3 doesn't escape the `"` in `[hostname]` and `[uri]` either, so if the ModSecurity part contains more than one `[hostname "` or `[uri "`, the line is broken, these two values aren't used, and the error is `Ambiguous [hostname] or [uri] field, the values aren't used!`.
 
 ## Licensing
 
@@ -75,7 +77,7 @@ This means, we can apply any pull requests from any contributor after the agreem
 
 ## Current version
 
-The current version of library is `2.0.0`.
+The current version of library is `3.0.0`.
 
 ## API
 
@@ -109,7 +111,7 @@ Depends on your log source, you have to use one of `LOG_TYPE_APACHE` or `LOG_TYP
 `MODULE_VERSION` exists only in binding modules. This constant describes the module version, which could be different than the `LIBRARY_VERSION` (normally a bigger value), and could be different in bindings.
 
 #### Constants in bindings
-Depends on the used binding, these constants will appear in different ways: in some cases they are available through the module prefix (eg. in Python: `mscpylogparser.LOG_TYPE_APACHE`) or just simple the constant itself (eg. in Ruby: `LOG_TYPE_NGINX`). For more information, please check the test scripts.
+Depends on the used binding, these constants will appear in different ways: in some cases they are available through the module prefix (eg. in Python: `mscpylogparser.LOG_TYPE_APACHE`) or the module namespace (eg. in Ruby: `MscRubyLogParser::LOG_TYPE_NGINX`, and the function is `MscRubyLogParser.parse()`). For more information, please check the test scripts.
 
 ### Structure
 
@@ -249,7 +251,7 @@ will give
 45.134.144.140 (Nginx)
 ```
 
-As you can see, in case of Apache the parser will process the first `[client]` field. In case of Nginx this value is at the end of the line, in the `, client: ADDR, server: NAME` part that Nginx appends to the line. This part isn't escaped, and the client can send a fake one (eg. in the request line, or in a header), so the value is used only in the same cases as [`log_server`](#log_server): if the line contains exactly one `, client: ADDR, server: `, and it isn't cut by Nginx. Otherwise `log_client` is an empty string; an injection can hide the address, but can't replace it.
+As you can see, in case of Apache the parser will process the first `[client]` field. In case of Nginx this value is at the end of the line, in the `, client: ADDR, server: NAME` part that Nginx appends to the line. This part isn't escaped, and the client can send a fake one (eg. in the request line, or in a header), so the value is used only in the same cases as [`log_server`](#log_server): if the `, client: ADDR, server: ` is right after the ModSecurity part (after its last field), the end of the ModSecurity part isn't ambiguous, and the line isn't cut by Nginx. More (fake) `, client: ADDR, server: ` parts after it don't matter, unless one of them follows a fake `[ref "..."]` or `[unique_id "..."]` (eg. in the referrer): that's another possible end of the ModSecurity part, so the end is ambiguous, and neither the fields nor `log_client` are used (see the beginning of this document). Otherwise `log_client` is an empty string; an injection can hide the address, but can't replace it.
 
 ##### `log_entry_class`
 Contains the parsed ModSecurity message type.
@@ -555,7 +557,7 @@ will give
 modsecurity.digitalwave.hu
 ```
 
-This field can't be chunked.
+This field can't be chunked. If `[hostname]` is empty on an Nginx line, the value comes from the `, host: "..."` part of the Nginx context; if the context contains more than one (a fake one in the request line or in the referrer), none of them is used, the line is broken, and the error is `Ambiguous 'host: ""' field, the value isn't used!`.
 
 ##### `log_uri`
 Contains the URI of the request. This property is independent from the rule, and always presents.
@@ -590,7 +592,7 @@ This field can't be chunked.
 ##### `log_server`
 Contains the `server_name` of the Nginx `server` block that served the request, from the `, server: ` part that Nginx appends to the line, eg. `_` for a default server. Compare to `log_hostname`, which is the `Host` the client sent.
 
-It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part or the name is longer than 255 bytes, the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken, and [`log_client`](#log_client) is empty too: the two values come from the same `, client: ADDR, server: NAME` part.
+It's an empty string on Apache lines, and when the value can't be determined: there is no `, server: ` part right after the ModSecurity part (after its last field) or the name is longer than 255 bytes, the end of the ModSecurity part is ambiguous, or there is no context right after it and the line contains more than one `, client: ADDR, server: ` (one of them is a fake, sent by the client), or the line is 2047 bytes long, so it was cut by Nginx (at `NGX_MAX_ERROR_STR`), and on a cut line the real context may be lost while a fake one remains. In the last two cases one error is recorded, which doesn't mark the line as broken, and [`log_client`](#log_client) is empty too: the two values come from the same `, client: ADDR, server: NAME` part.
 
 Type: `*char`
 Max length: 255 bytes
@@ -628,30 +630,44 @@ Type: `int`
 ### Methods
 Library contains these methods:
 ```C
-int parse(char *line, size_t len, loglinetype LT, logdata *l);
+int parse(const char *line, size_t len, loglinetype LT, logdata *l);
 ```
 where the arguments:
 * pointer to the line itself
-* lenght of the line
+* lenght of the line in bytes
 * type of the line, see [constants](#constants) above
 * a logdata [structure](#structure)
 
 Note, that the last argument (logdata) is necessary only in C. If you use any kind of bindings, you don't need to care of that.
 
+`parse()` reads only the first `len` bytes of the line, and doesn't modify it. The line doesn't have to be terminated with `'\0'`, so it can be a part of a bigger buffer, eg. of a whole log file read into memory. A line ending (`\n` or `\r\n`) at the end of the line is ignored. The `logdata` structure doesn't have to be cleared before the call, `parse()` initializes it, so the same structure can be reused for every line.
+
 To see an example, you should check the examples directory. Here is a sample:
 ```C
-    char line[4096] = {0};
+    // bigger than MSCLOG_LINE_BUFF_SIZE: a too long line goes to parse() too,
+    // which reports it; the rest of an even longer line is skipped
+    static char line[MSCLOG_LINE_BUFF_SIZE * 2];
     size_t len      = 0;
-    while (fgets (line, 4095, fp) != NULL) {
+    while (fgets (line, sizeof(line), fp) != NULL) {
         len = strlen(line);
+        if (len == sizeof(line) - 1 && line[len-1] != '\n') {
+            int ch;
+            while ((ch = fgetc(fp)) != EOF && ch != '\n') {
+                ;
+            }
+        }
         if (len > 0) {
-            memset(&l, '\0', sizeof(logdata));
-
             parse(line, len, t, &l);
 
-            if (l.is_modsecline == 1) {
+            if (l.entry_is_modsecline == 1) {
                 ...
 ```
+
+```C
+int parse_checked (const char * line, size_t linelen, size_t len, loglinetype t, logdata * l);
+```
+
+Like `parse()`, for a line of `linelen` bytes and a `len` that comes from the caller (eg. from a script): if `len` is bigger than `linelen`, the whole line is parsed (`parse()` never reads after its end), the line is broken, the error `The given length (LEN) is bigger than the line (LINELEN bytes)!` is added with the positions `linelen` and `len`, and it returns 1. The bindings use it.
 
 ```C
 void read_msclog_err(msclogpool *pool, msclogerr *err);
@@ -689,6 +705,10 @@ Note: this method is not available in bindings, because the errors are expanded.
 ### Strucure in bindings
 
 As you can see above, in the available bindings (Lua, PHP, Python, Ruby) there is only one function exists, the `parse()`. For more details, please see the tests scripts under the `bindings/` directory.
+
+In Python, the line can be a `str` or a `bytes` object, and its length is given in bytes. If the line is `bytes`, the values of the fields and the error messages in `log_entry_errors` are `bytes` too, so a line that isn't valid UTF-8 can be parsed without decoding it.
+
+The second argument of `parse()` is the length of the line in bytes. If it's bigger than the line, the bindings parse the whole line (they never read after its end), set `entry_is_broken`, and add an error to `log_entry_errors`, eg. `The given length (816) is bigger than the line (716 bytes)!`, its positions in `log_entry_errors_pos` are the length of the line and the given length. A negative length, or a log type other than `LOG_TYPE_APACHE` and `LOG_TYPE_NGINX` raises an error (`ValueError` in Python and PHP 8, `ArgumentError` in Ruby, a Lua error; PHP 7 raises a warning and `parse()` returns `false`). In C, `parse()` returns 1 for an unknown log type, with empty fields and the error `Unknown log type!`.
 
 Note, that the PHP script runs with this command (after build and install):
 ```bash
@@ -804,7 +824,7 @@ To build the library, you need at least:
 
 There is no other library dependencies, if you want to use it for your C codes.
 
-If you want to bind the library for any kind of supported supported languages (Python3, Lua, Ruby, PHP), you have to install its development tool.
+If you want to bind the library for any kind of supported supported languages (Python3, Lua, Ruby, PHP), you have to install its development tool. The Python binding needs the `setuptools` and `pip` modules too (eg. on Debian/Ubuntu: `apt install python3-dev python3-setuptools python3-pip`), `configure` stops with an error if one of them is missing.
 
 To compile the code, just download the source and type as regular user:
 ```bash
@@ -813,12 +833,14 @@ To compile the code, just download the source and type as regular user:
 
 You can set the target directory given `--prefix=/path/to`, and set other options.
 
+The generated files (`configure`, `Makefile.in`, ...) are in the repository, so `autotools` aren't needed for the build, and `make` doesn't regenerate them. If you change `configure.ac` or a `Makefile.am`, run `autoreconf -fi`, or configure with `--enable-maintainer-mode`.
+
 To compile the bindings, these options are avaliable:
 ```bash
---enable-python \
---enable-lua \
---enable-ruby \
---enable-php
+--enable-python-binding \
+--enable-lua-binding \
+--enable-ruby-binding \
+--enable-php-binding
 ```
 
 Please note, that if you have more versions of a choosed language, you have to set explicit the used interpreter. Eg.:
@@ -826,17 +848,17 @@ Please note, that if you have more versions of a choosed language, you have to s
 ```bash
 PYTHON=/usr/bin/python3 RUBY=/path/to/ruby LUA=/path/to/lua5.4 PHP=/usr/local/bin/php7.4 \
 ./configure \
---enable-python \
---enable-lua \
---enable-ruby \
---enable-php
+--enable-python-binding \
+--enable-lua-binding \
+--enable-ruby-binding \
+--enable-php-binding
 ```
 
 At the end of the `configure` script run you will see the summary:
 ```
 ----------------------------------------------------------------------
 
- msclogparser Version 2.0.0 configuration:
+ msclogparser Version 3.0.0 configuration:
 
  OS Type        Linux
  Prefix         /usr/local

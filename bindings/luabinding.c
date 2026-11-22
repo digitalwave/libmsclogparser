@@ -53,42 +53,27 @@ modsecurity@digitalwave.hu
 
 #include "../src/msclogparser.h"
 
-#define MODULE_VERSION "2.0.0"
+// the version of the bindings is the version of the library
+#define MODULE_VERSION MSCLOGPARSER_VERSION
 
 static int msclualogparser_parse (lua_State *L) {
-    int n = lua_gettop(L);
-
-    if (n != 3) {
-        lua_pushliteral(L, "incorrect number of arguments");
-        lua_error(L);
+    if (lua_gettop(L) != 3) {
+        return luaL_error(L, "incorrect number of arguments");
     }
 
-    if (!lua_isstring(L, 1)) {
-        lua_pushliteral(L, "incorrect 1st argument");
-        lua_error(L);
-    }
-    const char *line = lua_tostring(L, 1);
-    if (line == NULL) {
-        lua_pushliteral(L, "can't access to log line");
-        lua_error(L);
-    }
+    size_t linelen;
+    const char *line = luaL_checklstring(L, 1, &linelen);
+    lua_Integer ilen = luaL_checkinteger(L, 2);
+    luaL_argcheck(L, ilen >= 0, 2, "len must not be negative");
+    size_t len = (size_t)ilen;
+    lua_Integer itype = luaL_checkinteger(L, 3);
+    luaL_argcheck(L, itype == LOG_TYPE_APACHE || itype == LOG_TYPE_NGINX, 3,
+                  "must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
+    loglinetype ltype = (loglinetype)itype;
 
-    if (!lua_isnumber(L, 2)) {
-        lua_pushliteral(L, "incorrect 2nd argument");
-        lua_error(L);
-    }
-    size_t len = lua_tointeger(L, 2);
-
-    if (!lua_isnumber(L, 3)) {
-        lua_pushliteral(L, "incorrect 3nd argument");
-        lua_error(L);
-    }
-    loglinetype ltype = lua_tointeger(L, 3);
-
+    // a len bigger than the line is reported by parse_checked()
     logdata l;
-    memset(&l, '\0', sizeof(logdata));
-
-    parse((char *)line, len, ltype, &l);
+    parse_checked(line, linelen, len, ltype, &l);
 
     lua_newtable(L);
     int maintable = lua_gettop(L);
@@ -97,8 +82,8 @@ static int msclualogparser_parse (lua_State *L) {
     lua_pushinteger(L, l.entry_is_modsecline);
     lua_settable(L, maintable);
 
-    lua_pushstring(L, "log_entry_raw_length");
-    lua_pushinteger(L, l.log_entry_raw_length);
+    lua_pushstring(L, "entry_is_broken");
+    lua_pushinteger(L, l.entry_is_broken);
     lua_settable(L, maintable);
 
     lua_pushstring(L, "log_entry_raw_length");
@@ -291,35 +276,35 @@ int luaopen_msclualogparser(lua_State *L) {
 
 
     lua_pushstring(L, "LOG_TYPE_APACHE");
-    lua_pushnumber(L, LOG_TYPE_APACHE);
+    lua_pushinteger(L, LOG_TYPE_APACHE);
     lua_settable(L, -3);
 
     lua_pushstring(L, "LOG_TYPE_NGINX");
-    lua_pushnumber(L, LOG_TYPE_NGINX);
+    lua_pushinteger(L, LOG_TYPE_NGINX);
     lua_settable(L, -3);
 
     lua_pushstring(L, "LOGMSG_UNKNOWN");
-    lua_pushnumber(L, LOGMSG_UNKNOWN);
+    lua_pushinteger(L, LOGMSG_UNKNOWN);
     lua_settable(L, -3);
 
     lua_pushstring(L, "LOGMSG_WARNING");
-    lua_pushnumber(L, LOGMSG_WARNING);
+    lua_pushinteger(L, LOGMSG_WARNING);
     lua_settable(L, -3);
 
     lua_pushstring(L, "LOGMSG_ACCDENIED");
-    lua_pushnumber(L, LOGMSG_ACCDENIED);
+    lua_pushinteger(L, LOGMSG_ACCDENIED);
     lua_settable(L, -3);
 
     lua_pushstring(L, "LOGMSG_REQBODY");
-    lua_pushnumber(L, LOGMSG_REQBODY);
+    lua_pushinteger(L, LOGMSG_REQBODY);
     lua_settable(L, -3);
 
     lua_pushstring(L, "LOGMSG_ERROR");
-    lua_pushnumber(L, LOGMSG_ERROR);
+    lua_pushinteger(L, LOGMSG_ERROR);
     lua_settable(L, -3);
 
     lua_pushstring(L, "LOGMSG_AUDITLOG");
-    lua_pushnumber(L, LOGMSG_AUDITLOG);
+    lua_pushinteger(L, LOGMSG_AUDITLOG);
     lua_settable(L, -3);
 
     lua_pushstring(L, "LIBRARY_VERSION");

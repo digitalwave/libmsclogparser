@@ -25,8 +25,7 @@ if (count($argv) < 3) {
 
 $logtype = NULL;
 if ($argv[2] == "apache") {
-    //$logtype = LOG_TYPE_APACHE;
-$logtype = 0;
+    $logtype = LOG_TYPE_APACHE;
 }
 elseif ($argv[2] == "nginx") {
     $logtype = LOG_TYPE_NGINX;
