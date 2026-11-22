@@ -1,14 +1,17 @@
 
-AC_INIT([msclogparser], [2.0.0], [modsecurity@digitalwave.hu])
+# the version is in src/msclogparser.h only (MSCLOGPARSER_MAJOR, _MINOR,
+# _PATCH): the package version and the SONAME come from there, and the
+# bindings use MSCLOGPARSER_VERSION
+m4_define([VER_MAJOR], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_MAJOR " | awk {'print $3'} | sed 's/\"//g'))
+m4_define([VER_MINOR], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_MINOR " | awk {'print $3'} | sed 's/\"//g'))
+m4_define([VER_PATCH], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_PATCH " | awk {'print $3'} | sed 's/\"//g'))
+
+AC_INIT([msclogparser], VER_MAJOR.VER_MINOR.VER_PATCH, [modsecurity@digitalwave.hu])
 #AM_INIT_AUTOMAKE([foreign subdir-objects])
 
 AC_CONFIG_SRCDIR([src/])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
-
-AC_DEFUN([VER_MAJOR], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_MAJOR " | awk {'print $3'} | sed 's/\"//g'))
-AC_DEFUN([VER_MINOR], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_MINOR " | awk {'print $3'} | sed 's/\"//g'))
-AC_DEFUN([VER_PATCH], m4_esyscmd_s(cat src/msclogparser.h | grep "define MSCLOGPARSER_PATCH " | awk {'print $3'} | sed 's/\"//g'))
 
 VER_NUMBER=VER_MAJOR:VER_MINOR:VER_PATCH
 AC_SUBST([VER_NUMBER])
@@ -22,6 +25,11 @@ AM_PROG_AR
 # AC_PROG_RANLIB
 
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
+# the generated files (configure, Makefile.in, ...) are committed, and a git
+# checkout doesn't keep their mtimes: don't let make rerun the autotools (it
+# would need the same automake version), run autoreconf -fi after a change of
+# configure.ac or Makefile.am, or configure with --enable-maintainer-mode
+AM_MAINTAINER_MODE
 
 AC_CHECK_HEADER([string.h], [], [AC_MSG_ERROR([unable to find string.h])])
 AC_CHECK_HEADER([stdlib.h], [], [AC_MSG_ERROR([unable to find stdlib.h])])
@@ -63,6 +71,7 @@ esac
 BINDING_ALL=""
 BINDING_INSTALL_EXEC=""
 BINDING_CLEAN=""
+BINDING_UNINSTALL=""
 
 dnl Check if user wants Python3 binding
 AC_MSG_CHECKING([whether to build Python binding])
@@ -76,7 +85,7 @@ AS_IF([test "x$wantpythonbinding" = xtrue],
     [
         dnl Look for Python
         AC_MSG_RESULT([yes])
-        AM_PATH_PYTHON(,, [:])
+        AM_PATH_PYTHON
         python_main_ver=`$PYTHON -c "import sys; print(sys.version.split('.')[[0]])"`
         python_sub_ver=`$PYTHON -c "import sys; print(sys.version.split('.')[[1]])"`
         AC_ARG_VAR([PYTHON_INCLUDE], [Include flags for python, bypassing python-config])
@@ -104,8 +113,19 @@ AS_IF([test "x$wantpythonbinding" = xtrue],
                 [Define to 1 if you have the Python3 libraries.])
             ]
         )
+        dnl setup.py builds the module with setuptools, and make install
+        dnl installs it with pip: neither is part of every Python install
+        dnl (eg. python3-setuptools and python3-pip on Debian/Ubuntu)
+        for pymod in setuptools pip; do
+            AC_MSG_CHECKING([for the $pymod module of $PYTHON])
+            AS_IF([$PYTHON -c "import $pymod" >/dev/null 2>&1],
+                [AC_MSG_RESULT([yes])],
+                [AC_MSG_RESULT([no])
+                 AC_MSG_ERROR([the Python binding needs the $pymod module for $PYTHON (eg. the python3-$pymod package on Debian/Ubuntu).])])
+        done
         BINDING_ALL="${BINDING_ALL} all-py"
         BINDING_CLEAN="${BINDING_CLEAN} clean-py"
+        BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-py"
 	],
     [AC_MSG_RESULT([no])]
 )
@@ -132,6 +152,7 @@ AS_IF(
         BINDING_ALL="${BINDING_ALL} all-lua"
         BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-lua"
         BINDING_CLEAN="${BINDING_CLEAN} clean-lua"
+        BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-lua"
 
         AC_SUBST(LUA_INCLUDE)
         AC_SUBST(LUA_LIB)
@@ -186,6 +207,7 @@ AS_IF([test "x$wantrubybinding" = xtrue],[
     BINDING_ALL="${BINDING_ALL} all-ruby"
     BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-ruby"
     BINDING_CLEAN="${BINDING_CLEAN} clean-ruby"
+    BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-ruby"
 
     CPPFLAGS="$OLD_CPPFLAGS"
     LDFLAGS="$OLD_LDFLAGS"
@@ -246,6 +268,7 @@ AS_IF([test "x$wantphpbinding" = xtrue],[
     BINDING_ALL="${BINDING_ALL} all-php"
     BINDING_INSTALL_EXEC="${BINDING_INSTALL_EXEC} install-exec-php"
     BINDING_CLEAN="${BINDING_CLEAN} clean-php"
+    BINDING_UNINSTALL="${BINDING_UNINSTALL} uninstall-php"
 
     CPPFLAGS="$OLD_CPPFLAGS"
     CFLAGS="$OLD_CFLAGS"
@@ -266,6 +289,7 @@ AM_CONDITIONAL([ENABLE_PHP],[test "x$wantphpbinding" = xtrue])
 AC_SUBST([BINDING_ALL])
 AC_SUBST([BINDING_INSTALL_EXEC])
 AC_SUBST([BINDING_CLEAN])
+AC_SUBST([BINDING_UNINSTALL])
 
 AC_OUTPUT
 
