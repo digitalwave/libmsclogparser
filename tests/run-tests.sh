@@ -6,7 +6,8 @@
 #   CFLAGS="-g -fsanitize=address,undefined" tests/run-tests.sh
 #
 # The list of programs is check_PROGRAMS in Makefile.am; each one is a
-# single source file (tests/NAME.c) that includes src/msclogparser.c.
+# single source file (tests/NAME.c) that includes src/msclogparser.c, except
+# tests/test_header_c89.c, which includes only the header.
 
 set -e
 cd "$(dirname "$0")/.."
@@ -20,6 +21,9 @@ PROGRAMS=$(sed -n 's/^check_PROGRAMS *= *//p' Makefile.am)
 
 for p in $PROGRAMS; do
     echo "== $p"
-    $CC $CFLAGS -Wall -Isrc -o "$OUT" "$p.c"
+    # the header test is built as ISO C90 (tests_test_header_c89_CFLAGS)
+    STD=""
+    case "$p" in *_c89) STD="-std=c89 -pedantic-errors" ;; esac
+    $CC $CFLAGS $STD -Wall -Isrc -o "$OUT" "$p.c"
     "$OUT"
 done
