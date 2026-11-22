@@ -1,3 +1,103 @@
+v3.0.0 - 2026-11-22
+-------------------
+  * parse() doesn't modify the line: it parses a copy in the new
+    logdata field linebuf, takes a const char *, reads only the
+    first len bytes, and the line doesn't have to be terminated
+    (before it wrote a '\0' to line[len], which changed the script
+    strings in the bindings, and crashed PHP with opcache)
+  * A line of 8192 (MSCLOG_LINE_BUFF_SIZE) bytes or longer (without
+    the line ending) isn't parsed, it's reported as an error, and
+    entry_is_modsecline is set if it's a ModSecurity line
+  * Fix: the fields are searched only in the ModSecurity part of the
+    line, before the context of the web server (Nginx: client,
+    server, request, host, referrer; Apache: referer): fake fields
+    there replaced the real [file], [id], [msg], [hostname],
+    [unique_id], ...; the end of the ModSecurity part is the context
+    right after its last field (with an optional ' while ACTION' on
+    Nginx), if there are more such places (a fake one), or the only
+    one is followed by fields on an Apache line or a line cut by
+    Nginx (the real context can be missing there), the fields
+    aren't used (only the class and the message are kept), and an
+    error is reported - also if the ModSecurity part contains more
+    than one [file] or [id]; Nginx log_client and log_server are used
+    if their part is right after the ModSecurity part, even if fake
+    ones follow it (or the only one after the message of a line
+    without fields), otherwise a warning says why
+  * Fix: [uri] and [unique_id] are searched after [hostname], not
+    from the beginning of the line (a '[uri "' in the message
+    replaced the real [uri]); if the ModSecurity part contains more
+    '[hostname "' or '[uri "' (libmodsecurity3 doesn't escape the '"'
+    in them), the line is broken, and the two values aren't used
+  * Fix: the class of an Apache line ("Warning.", "Access", "Rule",
+    "Request body", "Audit log") is taken only from the start of the
+    message (it was found anywhere, eg. in the [uri]), and [client]
+    or [remote] only from the prefix, before " ModSecurity:"
+  * Fix: log_modsec_msg_length of the Apache "Request body", "Audit
+    log" and "Rule" lines (it was 0)
+  * Fix: an empty Nginx [hostname] is taken from the ', host: "' of
+    the context only if there is exactly one (a 'host: "' in the
+    request line won before), otherwise the line is broken; without a
+    context (eg. a cut line) it's not searched at all
+  * parse() initializes the logdata: the caller doesn't have to
+    clear it before every line, the bindings don't clear it anymore
+  * Fix: don't store a part of a UTF-8 character when a field is
+    cut, and don't trim a value that isn't cut
+  * Fix: quadratic re-search in find_pattern() on lines with many
+    partial field names
+  * Bindings: if len is bigger than the line, the whole line is
+    parsed, and an error is added to log_entry_errors (by the new
+    parse_checked() of the library); a negative len raises an error
+  * A line with a NUL character (except at its end) isn't parsed,
+    it's reported as an error, like a too long line; the Python and
+    Ruby bindings don't raise an error for it anymore, so all four
+    bindings handle it the same way
+  * parse() reports an unknown log type as an error, the bindings
+    raise an error for it
+  * Python binding: fix reference leaks, report the real argument
+    errors, accept the line as bytes (the values and the error
+    messages are bytes too),
+    build with setuptools instead of distutils, the positions and the
+    lengths are passed as unsigned long long (unsigned long is 32 bits
+    on 64-bit Windows), it builds from an sdist too (with the
+    installed header and library)
+  * Ruby binding: parse() and the constants are in the
+    MscRubyLogParser module (API change), new entry_is_modsecline,
+    the values get the encoding of the line (binary if it isn't ASCII
+    compatible, eg. UTF-16), the pointer of the line
+    is taken after the conversions of the arguments (a to_int could
+    free its buffer)
+  * Lua binding: new entry_is_broken, the constants are integers
+  * PHP binding: fix the TSRM cache macro of ZTS builds, remove
+    unused variables, the version of the module is MODULE_VERSION
+    (phpversion() said 1.0)
+  * Python and Ruby test scripts pass the length in bytes
+  * The installed header compiles as ISO C90 (no // comments), make
+    check tests it
+  * README: the C sample reads lines up to 2 * MSCLOG_LINE_BUFF_SIZE
+  * examples/example01.c doesn't clear logdata for every line, and
+    reads lines up to 2 * MSCLOG_LINE_BUFF_SIZE (a longer line was cut
+    into more records at 4096 bytes), and it's built with the header
+    of the source tree (a VPATH build, eg. make distcheck, used an
+    installed one)
+  * pkg-config file: the version and the paths come from configure
+    (it said 0.3.0, and had a fixed libdir)
+  * Build: the version is only in src/msclogparser.h: configure
+    (package version, pkg-config, SONAME), the Python package and the
+    MODULE_VERSION of the bindings take it from there
+  * Build: make uninstall removes the bindings (the Python module
+    from the one directory its pip installs into, the module is
+    installed with that pip), and make install of the Lua, Ruby and
+    PHP bindings honors DESTDIR
+  * Build: make doesn't rerun the autotools (AM_MAINTAINER_MODE), the
+    committed generated files are used; run autoreconf -fi after a
+    change of configure.ac or a Makefile.am
+  * Build: configure stops with an error if the setuptools or the pip
+    module of Python is missing for the Python binding (make failed
+    with ModuleNotFoundError); README: the configure options of the
+    bindings are --enable-<language>-binding
+  * ABI change: logdata has a new field, the SONAME is
+    libmsclogparser.so.3, rebuild the bindings and applications
+
 v2.0.0 - 2026-11-03
 -------------------
   * New field: log_server, the server_name of the Nginx server
