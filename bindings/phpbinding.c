@@ -53,12 +53,22 @@ modsecurity@digitalwave.hu
 
 #include "../src/msclogparser.h"
 
-#define MODULE_VERSION "2.0.0"
+// the version of the bindings is the version of the library
+#define MODULE_VERSION MSCLOGPARSER_VERSION
+
+// an invalid argument value: PHP 8 throws a ValueError, PHP 7 has no
+// zend_argument_value_error() and RETURN_THROWS(), there a warning is raised
+// and parse() returns false, like for the other argument errors
+#if PHP_VERSION_ID >= 80000
+#define MSCL_ARG_VALUE_ERROR(num, msg) do { zend_argument_value_error(num, msg); RETURN_THROWS(); } while (0)
+#else
+#define MSCL_ARG_VALUE_ERROR(num, msg) do { php_error_docref(NULL, E_WARNING, "Argument #%d " msg, num); RETURN_FALSE; } while (0)
+#endif
 
 extern zend_module_entry mscphplogparser_module_entry;
 # define phpext_mscphplogparser_ptr &mscphplogparser_module_entry
 
-# define PHP_MSCPHPLOGPARSER_VERSION "1.0"
+# define PHP_MSCPHPLOGPARSER_VERSION MODULE_VERSION
 
 
 PHP_MINIT_FUNCTION(mscphplogparser);
@@ -93,18 +103,21 @@ PHP_FUNCTION(parse)
     zend_long     len;
     zend_long     ltype;
 
-    zend_string *retval;
-
     if (zend_parse_parameters(ZEND_NUM_ARGS(), "sll", &line, &linelen, &len, &ltype) == FAILURE) {
         RETURN_FALSE;
     }
+    if (len < 0) {
+        MSCL_ARG_VALUE_ERROR(2, "must not be negative");
+    }
+    if (ltype != LOG_TYPE_APACHE && ltype != LOG_TYPE_NGINX) {
+        MSCL_ARG_VALUE_ERROR(3, "must be LOG_TYPE_APACHE or LOG_TYPE_NGINX");
+    }
 
+    // a len bigger than the line is reported by parse_checked()
     logdata l;
-    memset(&l, '\0', sizeof(logdata));
+    parse_checked(line, linelen, (size_t)len, (loglinetype)ltype, &l);
 
-    int rc = parse(line, (size_t)len, (loglinetype)ltype, &l);
-
-    zval arr, tags, errors, errorspos;
+    zval tags, errors, errorspos;
 
     array_init(return_value);
 
@@ -179,7 +192,7 @@ static const zend_function_entry mscphplogparser_functions[] = {
 };
 
 PHP_MINIT_FUNCTION(mscphplogparser) {
-#if defined(ZTS) && defined(COMPILE_DL_TEST)
+#if defined(ZTS) && defined(COMPILE_DL_MSCPHPLOGPARSER)
     ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 

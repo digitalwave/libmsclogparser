@@ -41,7 +41,7 @@ except:
 
 li = 1
 for l in lines:
-    r = mscpylogparser.parse(l, len(l), lt)
+    r = mscpylogparser.parse(l, len(l.encode()), lt)
     #if r['is_broken'] == 1:
     #    print(l)
     if True:

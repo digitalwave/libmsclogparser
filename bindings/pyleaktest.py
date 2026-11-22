@@ -10,8 +10,7 @@
 # Usage: pyleaktest.py [logfile apache|nginx]
 # Without arguments it uses the built-in sample lines.
 #
-# Note: parse() writes a '\0' to line[len], so the lines are passed
-# without the trailing newline and with their length in bytes.
+# Note: the lines are passed with their length in bytes.
 
 import sys
 import gc
